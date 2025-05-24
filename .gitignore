@@ -1,0 +1,10 @@
+react/node_modules/
+react/package-lock.json
+
+rust/target/
+rust/pkg
+rust/Cargo.lock
+
+*.log
+*.env
+*.wasm
