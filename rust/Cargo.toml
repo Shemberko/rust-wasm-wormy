@@ -17,7 +17,15 @@ web-sys = { version = "0.3", features = [
   "Document",
   "HtmlCanvasElement",
   "CanvasRenderingContext2d",
+  "WebSocket",
+  "MessageEvent",
+  "ErrorEvent",
+  "Event",
+  "console"
 ] }
+js-sys = "0.3"
+
+
 
 # The `console_error_panic_hook` crate provides better debugging of panics by
 # logging them with `console.error`. This is great for development, but requires
