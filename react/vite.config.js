@@ -8,8 +8,9 @@ export default defineConfig({
   server: {
     fs: {
       allow: [
-        'C:/Users/Developer/game/wararar/rust/pkg',  // дозвіл на цю папку
-        'C:/Users/Developer/game/wararar/react',     // і на основну папку
+        'D:/wormy/rust-wasm-wormy/react',
+        // додатково можна додати корінь проєкту
+        'D:/wormy/rust-wasm-wormy'
       ],
     },
   },
