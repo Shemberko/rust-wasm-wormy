@@ -1,14 +1,14 @@
+mod map;
 mod utils;
 
-use wasm_bindgen::prelude::*;
-use wasm_bindgen::{JsCast, closure::Closure};
-use web_sys::{
-    window, HtmlCanvasElement, CanvasRenderingContext2d,
-    WebSocket, MessageEvent, Event, ErrorEvent,
-};
 use std::cell::RefCell;
-use web_sys::console;
+use wasm_bindgen::prelude::*;
+use wasm_bindgen::{closure::Closure, JsCast};
+use web_sys::{
+    window, CanvasRenderingContext2d, ErrorEvent, Event, HtmlCanvasElement, MessageEvent, WebSocket,
+};
 
+use crate::map::Map;
 #[wasm_bindgen]
 extern "C" {
     fn alert(s: &str);
@@ -20,10 +20,13 @@ thread_local! {
     static VELOCITY_Y: RefCell<f64> = RefCell::new(0.0);
 }
 
-const GROUND_LEVEL: f64 = 390.0;
-const PLATFORM_X: f64 = 300.0;
-const PLATFORM_WIDTH: f64 = 150.0;
-const PLATFORM_HEIGHT: f64 = 20.0;
+pub struct Player {
+    pub x: f64,
+    pub y: f64,
+    pub velocity_y: f64,
+    pub width: f64,
+    pub height: f64,
+}
 
 const PLAYER_WIDTH: f64 = 50.0;
 const PLAYER_HEIGHT: f64 = 100.0;
@@ -45,10 +48,7 @@ pub fn play() -> Result<(), JsValue> {
     // 🎨 Малюємо трикутник
     ctx.clear_rect(0.0, 0.0, canvas.width() as f64, canvas.height() as f64);
 
-    let (x, y) = (
-        X.with(|x| *x.borrow()),
-        Y.with(|y| *y.borrow()),
-    );
+    let (x, y) = (X.with(|x| *x.borrow()), Y.with(|y| *y.borrow()));
 
     ctx.set_fill_style(&JsValue::from_str("blue"));
     ctx.fill_rect(x, y, PLAYER_WIDTH, PLAYER_HEIGHT);
@@ -91,30 +91,20 @@ pub fn move_left() {
 
             let new_x = x_pos - 5.0;
 
-            // Межі гравця після руху вліво
-            let player_left = new_x;
-            let player_bottom = y_pos + PLAYER_HEIGHT;
-
-            // Межі платформи
             let window = window().unwrap();
             let document = window.document().unwrap();
             let canvas = document
-                .get_element_by_id("mycanvas").unwrap()
-                .dyn_into::<HtmlCanvasElement>().unwrap();
+                .get_element_by_id("mycanvas")
+                .unwrap()
+                .dyn_into::<HtmlCanvasElement>()
+                .unwrap();
+            let canvas_width = canvas.width() as f64;
             let canvas_height = canvas.height() as f64;
 
-            let platform_top = canvas_height - PLATFORM_HEIGHT - 10.0;
-            let platform_bottom = platform_top + PLATFORM_HEIGHT;
+            let map = Map::new(canvas_width, canvas_height);
 
-            // Чи гравець вертикально на рівні платформи?
-            let on_platform_vertically = player_bottom > platform_top && y_pos < platform_bottom;
-
-            // Якщо гравець не заходить всередину платформи зліва — рух дозволений
-            let will_collide = player_left < PLATFORM_X + PLATFORM_WIDTH &&
-                               player_left > PLATFORM_X &&
-                               on_platform_vertically;
-
-            if !will_collide {
+            // Якщо рух вліво не призведе до колізій, оновлюємо позицію
+            if map.can_move_to(new_x, y_pos, PLAYER_WIDTH, PLAYER_HEIGHT) {
                 x_pos = new_x;
             }
 
@@ -132,28 +122,19 @@ pub fn move_right() {
 
             let new_x = x_pos + 5.0;
 
-            // Межі гравця після руху вправо
-            let player_right = new_x + PLAYER_WIDTH;
-            let player_bottom = y_pos + PLAYER_HEIGHT;
-
             let window = window().unwrap();
             let document = window.document().unwrap();
             let canvas = document
-                .get_element_by_id("mycanvas").unwrap()
-                .dyn_into::<HtmlCanvasElement>().unwrap();
+                .get_element_by_id("mycanvas")
+                .unwrap()
+                .dyn_into::<HtmlCanvasElement>()
+                .unwrap();
+            let canvas_width = canvas.width() as f64;
             let canvas_height = canvas.height() as f64;
 
-            let platform_top = canvas_height - PLATFORM_HEIGHT - 10.0;
-            let platform_bottom = platform_top + PLATFORM_HEIGHT;
+            let map = Map::new(canvas_width, canvas_height);
 
-            let on_platform_vertically = player_bottom > platform_top && y_pos < platform_bottom;
-
-            // Якщо гравець не заходить всередину платформи справа — рух дозволений
-            let will_collide = player_right > PLATFORM_X &&
-                               player_right < PLATFORM_X + PLATFORM_WIDTH &&
-                               on_platform_vertically;
-
-            if !will_collide {
+            if map.can_move_to(new_x, y_pos, PLAYER_WIDTH, PLAYER_HEIGHT) {
                 x_pos = new_x;
             }
 
@@ -162,30 +143,29 @@ pub fn move_right() {
     });
 }
 
-
 #[wasm_bindgen]
 pub fn jump() -> Result<(), JsValue> {
     VELOCITY_Y.with(|v| {
         Y.with(|y| {
             X.with(|x| {
-                let canvas = window().unwrap()
-                    .document().unwrap()
-                    .get_element_by_id("mycanvas").unwrap()
-                    .dyn_into::<HtmlCanvasElement>().unwrap();
+                let canvas = window()
+                    .unwrap()
+                    .document()
+                    .unwrap()
+                    .get_element_by_id("mycanvas")
+                    .unwrap()
+                    .dyn_into::<HtmlCanvasElement>()
+                    .unwrap();
                 let canvas_height = canvas.height() as f64;
+                let canvas_width = canvas.width() as f64;
 
-                let ground_level = canvas_height - PLAYER_HEIGHT;
-                let platform_y = canvas_height - PLATFORM_HEIGHT - 10.0;
+                let map = Map::new(canvas_width, canvas_height);
 
                 let x_pos = *x.borrow();
                 let y_pos = *y.borrow();
 
-                let is_on_ground = y_pos >= ground_level;
-                let is_on_platform = 
-                    y_pos + PLAYER_HEIGHT >= platform_y &&
-                    y_pos + PLAYER_HEIGHT <= platform_y + PLATFORM_HEIGHT &&
-                    x_pos + PLAYER_WIDTH >= PLATFORM_X &&
-                    x_pos <= PLATFORM_X + PLATFORM_WIDTH;
+                let is_on_ground = y_pos + PLAYER_HEIGHT >= canvas_height;
+                let is_on_platform = is_player_on_platform(&map, x_pos, y_pos);
 
                 if is_on_ground || is_on_platform {
                     *v.borrow_mut() = -10.0;
@@ -208,34 +188,34 @@ pub fn move_down() {
 pub fn draw() -> Result<(), JsValue> {
     let window = window().unwrap();
     let document = window.document().unwrap();
-    let canvas = document.get_element_by_id("mycanvas")
+    let canvas = document
+        .get_element_by_id("mycanvas")
         .unwrap()
         .dyn_into::<HtmlCanvasElement>()?;
-    let ctx = canvas.get_context("2d")?.unwrap().dyn_into::<CanvasRenderingContext2d>()?;
+    let ctx = canvas
+        .get_context("2d")?
+        .unwrap()
+        .dyn_into::<CanvasRenderingContext2d>()?;
 
+    let (x, y) = (X.with(|x| *x.borrow()), Y.with(|y| *y.borrow()));
+
+    let canvas_width = canvas.width() as f64;
     let canvas_height = canvas.height() as f64;
-    let ground_level = canvas_height - PLAYER_HEIGHT;
-    let platform_y = canvas_height - PLATFORM_HEIGHT - 10.0;
 
-    let (x, y) = (
-        X.with(|x| *x.borrow()),
-        Y.with(|y| *y.borrow()),
-    );
+    ctx.clear_rect(0.0, 0.0, canvas_width, canvas_height);
 
-    ctx.clear_rect(0.0, 0.0, canvas.width() as f64, canvas.height() as f64);
-    
+    let map = Map::new(canvas_width, canvas_height);
+    map.draw(&ctx);
+
     ctx.set_fill_style(&JsValue::from_str("blue"));
     ctx.fill_rect(x, y, PLAYER_WIDTH, PLAYER_HEIGHT);
-
-    ctx.set_fill_style(&JsValue::from_str("green"));
-    ctx.fill_rect(PLATFORM_X, platform_y, PLATFORM_WIDTH, PLATFORM_HEIGHT);
 
     Ok(())
 }
 
 #[wasm_bindgen]
 pub fn apply_physics() -> Result<(), JsValue> {
-    const GRAVITY: f64 = 0.5; // прискорення падіння
+    const GRAVITY: f64 = 0.5;
 
     let window = window().unwrap();
     let document = window.document().unwrap();
@@ -244,9 +224,10 @@ pub fn apply_physics() -> Result<(), JsValue> {
         .unwrap()
         .dyn_into::<HtmlCanvasElement>()?;
 
+    let canvas_width = canvas.width() as f64;
     let canvas_height = canvas.height() as f64;
-    let ground_level = canvas_height - PLAYER_HEIGHT;
-    let platform_y = canvas_height - PLATFORM_HEIGHT - 10.0;
+
+    let map = Map::new(canvas_width, canvas_height);
 
     VELOCITY_Y.with(|v| {
         Y.with(|y| {
@@ -258,18 +239,38 @@ pub fn apply_physics() -> Result<(), JsValue> {
                 vy += GRAVITY;
                 y_pos += vy;
 
-                let is_on_platform = 
-                    y_pos + PLAYER_HEIGHT >= platform_y &&
-                    y_pos + PLAYER_HEIGHT <= platform_y + PLATFORM_HEIGHT &&
-                    x_pos + PLAYER_WIDTH >= PLATFORM_X &&
-                    x_pos <= PLATFORM_X + PLATFORM_WIDTH &&
-                    vy >= 0.0; // падає вниз
-
-                if is_on_platform {
-                    y_pos = platform_y - PLAYER_HEIGHT;
+                if vy >= 0.0 && is_player_on_platform(&map, x_pos, y_pos) {
+                    // Колізія знизу (платформа або земля)
+                    let feet_y = y_pos + PLAYER_HEIGHT + 1.0;
+                    let tile_row = (feet_y / map.tile_size).floor();
+                    y_pos = tile_row * map.tile_size - PLAYER_HEIGHT;
                     vy = 0.0;
-                } else if y_pos >= ground_level {
-                    y_pos = ground_level;
+                } else if vy < 0.0 {
+                    // Перевірка колізії зверху
+                    // Перевіримо 3 точки зверху: ліву, центр, праву
+                    let head_y = y_pos;
+                    let check_points = [
+                        x_pos + 1.0,
+                        x_pos + PLAYER_WIDTH / 2.0,
+                        x_pos + PLAYER_WIDTH - 1.0,
+                    ];
+                    let mut hit_ceiling = false;
+                    for &px in &check_points {
+                        if map.is_solid_at(px, head_y) {
+                            hit_ceiling = true;
+                            break;
+                        }
+                    }
+                    if hit_ceiling {
+                        // Встановлюємо гравця безпосередньо під платформою
+                        let tile_row = (head_y / map.tile_size).floor();
+                        y_pos = (tile_row + 1.0) * map.tile_size;
+                        vy = 0.0;
+                    }
+                }
+
+                if y_pos + PLAYER_HEIGHT >= canvas_height {
+                    y_pos = canvas_height - PLAYER_HEIGHT;
                     vy = 0.0;
                 }
 
@@ -280,4 +281,21 @@ pub fn apply_physics() -> Result<(), JsValue> {
     });
 
     Ok(())
+}
+
+fn is_player_on_platform(map: &Map, player_x: f64, player_y: f64) -> bool {
+    let feet_y = player_y + PLAYER_HEIGHT + 1.0; // 1 піксель під гравцем
+                                                 // Перевіряємо кілька точок під ногами гравця (ліва, центр, права)
+    let check_points = [
+        player_x,                      // ліва нога
+        player_x + PLAYER_WIDTH / 2.0, // центр
+        player_x + PLAYER_WIDTH - 1.0, // права нога
+    ];
+
+    for &x in &check_points {
+        if map.is_solid_at(x, feet_y) {
+            return true;
+        }
+    }
+    false
 }
