@@ -9,7 +9,8 @@ export default defineConfig({
     fs: {
       allow: [
         'D:/wormy/rust-wasm-wormy/react',
-        // додатково можна додати корінь проєкту
+        'C:/Users/Developer/game/wararar/react',
+        'C:/Users/Developer/game/wararar',
         'D:/wormy/rust-wasm-wormy'
       ],
     },

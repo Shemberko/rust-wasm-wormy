@@ -42,7 +42,6 @@ pub fn play() -> Result<(), JsValue> {
         .unwrap()
         .dyn_into::<CanvasRenderingContext2d>()?;
 
-    // 🎨 Малюємо трикутник
     ctx.clear_rect(0.0, 0.0, canvas.width() as f64, canvas.height() as f64);
 
     let img = document
