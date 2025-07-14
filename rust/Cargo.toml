@@ -17,6 +17,7 @@ web-sys = { version = "0.3", features = [
   "Document",
   "HtmlCanvasElement",
   "CanvasRenderingContext2d",
+  "HtmlImageElement",
   "WebSocket",
   "MessageEvent",
   "ErrorEvent",
@@ -24,6 +25,7 @@ web-sys = { version = "0.3", features = [
   "console"
 ] }
 js-sys = "0.3"
+wasm-bindgen-futures = "0.4"
 
 
 

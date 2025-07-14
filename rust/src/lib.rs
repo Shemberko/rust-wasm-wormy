@@ -1,7 +1,10 @@
+mod animation;
 mod map;
+mod player;
 mod utils;
 
 use std::cell::RefCell;
+use std::collections::HashSet;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::{closure::Closure, JsCast};
 use web_sys::{
@@ -9,27 +12,21 @@ use web_sys::{
 };
 
 use crate::map::Map;
+use player::Player;
+
 #[wasm_bindgen]
 extern "C" {
     fn alert(s: &str);
 }
 
+// thread_local! {
+//     static PLAYER: RefCell<Player> = RefCell::new(Player::new());
+// }
+
 thread_local! {
-    static X: RefCell<f64> = RefCell::new(100.0);
-    static Y: RefCell<f64> = RefCell::new(50.0);
-    static VELOCITY_Y: RefCell<f64> = RefCell::new(0.0);
+    static PLAYER: RefCell<Option<Player>> = RefCell::new(None);
+    static KEYS_PRESSED: RefCell<HashSet<String>> = RefCell::new(HashSet::new());
 }
-
-pub struct Player {
-    pub x: f64,
-    pub y: f64,
-    pub velocity_y: f64,
-    pub width: f64,
-    pub height: f64,
-}
-
-const PLAYER_WIDTH: f64 = 50.0;
-const PLAYER_HEIGHT: f64 = 100.0;
 
 #[wasm_bindgen]
 pub fn play() -> Result<(), JsValue> {
@@ -48,10 +45,10 @@ pub fn play() -> Result<(), JsValue> {
     // 🎨 Малюємо трикутник
     ctx.clear_rect(0.0, 0.0, canvas.width() as f64, canvas.height() as f64);
 
-    let (x, y) = (X.with(|x| *x.borrow()), Y.with(|y| *y.borrow()));
-
-    ctx.set_fill_style(&JsValue::from_str("blue"));
-    ctx.fill_rect(x, y, PLAYER_WIDTH, PLAYER_HEIGHT);
+    let img = document
+        .create_element("img")?
+        .dyn_into::<web_sys::HtmlImageElement>()?;
+    img.set_src("/animations/NuclearLeak_CharacterAnim_1.2/character_20x20_red.png");
 
     // 🌐 Підключення WebSocket
     let ws = WebSocket::new("ws://127.0.0.1:3000/ws")?; // заміни IP, якщо потрібно
@@ -83,108 +80,6 @@ pub fn play() -> Result<(), JsValue> {
 }
 
 #[wasm_bindgen]
-pub fn move_left() {
-    X.with(|x| {
-        Y.with(|y| {
-            let mut x_pos = *x.borrow();
-            let y_pos = *y.borrow();
-
-            let new_x = x_pos - 5.0;
-
-            let window = window().unwrap();
-            let document = window.document().unwrap();
-            let canvas = document
-                .get_element_by_id("mycanvas")
-                .unwrap()
-                .dyn_into::<HtmlCanvasElement>()
-                .unwrap();
-            let canvas_width = canvas.width() as f64;
-            let canvas_height = canvas.height() as f64;
-
-            let map = Map::new(canvas_width, canvas_height);
-
-            // Якщо рух вліво не призведе до колізій, оновлюємо позицію
-            if map.can_move_to(new_x, y_pos, PLAYER_WIDTH, PLAYER_HEIGHT) {
-                x_pos = new_x;
-            }
-
-            *x.borrow_mut() = x_pos;
-        });
-    });
-}
-
-#[wasm_bindgen]
-pub fn move_right() {
-    X.with(|x| {
-        Y.with(|y| {
-            let mut x_pos = *x.borrow();
-            let y_pos = *y.borrow();
-
-            let new_x = x_pos + 5.0;
-
-            let window = window().unwrap();
-            let document = window.document().unwrap();
-            let canvas = document
-                .get_element_by_id("mycanvas")
-                .unwrap()
-                .dyn_into::<HtmlCanvasElement>()
-                .unwrap();
-            let canvas_width = canvas.width() as f64;
-            let canvas_height = canvas.height() as f64;
-
-            let map = Map::new(canvas_width, canvas_height);
-
-            if map.can_move_to(new_x, y_pos, PLAYER_WIDTH, PLAYER_HEIGHT) {
-                x_pos = new_x;
-            }
-
-            *x.borrow_mut() = x_pos;
-        });
-    });
-}
-
-#[wasm_bindgen]
-pub fn jump() -> Result<(), JsValue> {
-    VELOCITY_Y.with(|v| {
-        Y.with(|y| {
-            X.with(|x| {
-                let canvas = window()
-                    .unwrap()
-                    .document()
-                    .unwrap()
-                    .get_element_by_id("mycanvas")
-                    .unwrap()
-                    .dyn_into::<HtmlCanvasElement>()
-                    .unwrap();
-                let canvas_height = canvas.height() as f64;
-                let canvas_width = canvas.width() as f64;
-
-                let map = Map::new(canvas_width, canvas_height);
-
-                let x_pos = *x.borrow();
-                let y_pos = *y.borrow();
-
-                let is_on_ground = y_pos + PLAYER_HEIGHT >= canvas_height;
-                let is_on_platform = is_player_on_platform(&map, x_pos, y_pos);
-
-                if is_on_ground || is_on_platform {
-                    *v.borrow_mut() = -10.0;
-                }
-            });
-        });
-    });
-
-    Ok(())
-}
-
-#[wasm_bindgen]
-pub fn move_down() {
-    Y.with(|y| {
-        *y.borrow_mut() += 5.0;
-    });
-}
-
-#[wasm_bindgen]
 pub fn draw() -> Result<(), JsValue> {
     let window = window().unwrap();
     let document = window.document().unwrap();
@@ -197,8 +92,6 @@ pub fn draw() -> Result<(), JsValue> {
         .unwrap()
         .dyn_into::<CanvasRenderingContext2d>()?;
 
-    let (x, y) = (X.with(|x| *x.borrow()), Y.with(|y| *y.borrow()));
-
     let canvas_width = canvas.width() as f64;
     let canvas_height = canvas.height() as f64;
 
@@ -207,8 +100,11 @@ pub fn draw() -> Result<(), JsValue> {
     let map = Map::new(canvas_width, canvas_height);
     map.draw(&ctx);
 
-    ctx.set_fill_style(&JsValue::from_str("blue"));
-    ctx.fill_rect(x, y, PLAYER_WIDTH, PLAYER_HEIGHT);
+    PLAYER.with(|p| {
+        if let Some(player) = p.borrow().as_ref() {
+            player.draw(&ctx);
+        }
+    });
 
     Ok(())
 }
@@ -229,73 +125,105 @@ pub fn apply_physics() -> Result<(), JsValue> {
 
     let map = Map::new(canvas_width, canvas_height);
 
-    VELOCITY_Y.with(|v| {
-        Y.with(|y| {
-            X.with(|x| {
-                let mut vy = *v.borrow();
-                let mut y_pos = *y.borrow();
-                let x_pos = *x.borrow();
-
-                vy += GRAVITY;
-                y_pos += vy;
-
-                if vy >= 0.0 && is_player_on_platform(&map, x_pos, y_pos) {
-                    // Колізія знизу (платформа або земля)
-                    let feet_y = y_pos + PLAYER_HEIGHT + 1.0;
-                    let tile_row = (feet_y / map.tile_size).floor();
-                    y_pos = tile_row * map.tile_size - PLAYER_HEIGHT;
-                    vy = 0.0;
-                } else if vy < 0.0 {
-                    // Перевірка колізії зверху
-                    // Перевіримо 3 точки зверху: ліву, центр, праву
-                    let head_y = y_pos;
-                    let check_points = [
-                        x_pos + 1.0,
-                        x_pos + PLAYER_WIDTH / 2.0,
-                        x_pos + PLAYER_WIDTH - 1.0,
-                    ];
-                    let mut hit_ceiling = false;
-                    for &px in &check_points {
-                        if map.is_solid_at(px, head_y) {
-                            hit_ceiling = true;
-                            break;
-                        }
-                    }
-                    if hit_ceiling {
-                        // Встановлюємо гравця безпосередньо під платформою
-                        let tile_row = (head_y / map.tile_size).floor();
-                        y_pos = (tile_row + 1.0) * map.tile_size;
-                        vy = 0.0;
-                    }
-                }
-
-                if y_pos + PLAYER_HEIGHT >= canvas_height {
-                    y_pos = canvas_height - PLAYER_HEIGHT;
-                    vy = 0.0;
-                }
-
-                *v.borrow_mut() = vy;
-                *y.borrow_mut() = y_pos;
+    PLAYER.with(|p| {
+        if let Some(player) = p.borrow_mut().as_mut() {
+            let is_on_ground =
+                player.is_on_ground(&map) || player.y + player.height >= canvas_height;
+            let is_moving = KEYS_PRESSED.with(|keys| {
+                let keys = keys.borrow();
+                keys.contains("ArrowLeft")
+                    || keys.contains("ArrowRight")
+                    || keys.contains("KeyA")
+                    || keys.contains("KeyD")
             });
-        });
+
+            player.update_animation_state(is_moving, is_on_ground);
+            player.apply_physics(&map, canvas_height);
+            player.update(0.016);
+        }
     });
 
     Ok(())
 }
 
-fn is_player_on_platform(map: &Map, player_x: f64, player_y: f64) -> bool {
-    let feet_y = player_y + PLAYER_HEIGHT + 1.0; // 1 піксель під гравцем
-                                                 // Перевіряємо кілька точок під ногами гравця (ліва, центр, права)
-    let check_points = [
-        player_x,                      // ліва нога
-        player_x + PLAYER_WIDTH / 2.0, // центр
-        player_x + PLAYER_WIDTH - 1.0, // права нога
-    ];
+#[wasm_bindgen]
+pub fn move_left() {
+    let window = window().unwrap();
+    let document = window.document().unwrap();
+    let canvas = document
+        .get_element_by_id("mycanvas")
+        .unwrap()
+        .dyn_into::<HtmlCanvasElement>()
+        .unwrap();
 
-    for &x in &check_points {
-        if map.is_solid_at(x, feet_y) {
-            return true;
+    let map = Map::new(canvas.width() as f64, canvas.height() as f64);
+
+    PLAYER.with(|p| {
+        if let Some(player) = p.borrow_mut().as_mut() {
+            player.move_left(&map);
         }
-    }
-    false
+    });
+}
+
+#[wasm_bindgen]
+pub fn move_right() {
+    let window = window().unwrap();
+    let document = window.document().unwrap();
+    let canvas = document
+        .get_element_by_id("mycanvas")
+        .unwrap()
+        .dyn_into::<HtmlCanvasElement>()
+        .unwrap();
+
+    let map = Map::new(canvas.width() as f64, canvas.height() as f64);
+
+    PLAYER.with(|p| {
+        if let Some(player) = p.borrow_mut().as_mut() {
+            player.move_right(&map);
+        }
+    });
+}
+
+#[wasm_bindgen]
+pub fn jump() {
+    let window = window().unwrap();
+    let document = window.document().unwrap();
+    let canvas = document
+        .get_element_by_id("mycanvas")
+        .unwrap()
+        .dyn_into::<HtmlCanvasElement>()
+        .unwrap();
+
+    let canvas_height = canvas.height() as f64;
+    let canvas_width = canvas.width() as f64;
+    let map = Map::new(canvas_width, canvas_height);
+
+    PLAYER.with(|p| {
+        if let Some(player) = p.borrow_mut().as_mut() {
+            player.jump(&map, canvas_height);
+        }
+    });
+}
+
+#[wasm_bindgen]
+pub async fn init_player() -> Result<(), JsValue> {
+    let player = crate::player::create_player().await?;
+    PLAYER.with(|p| {
+        *p.borrow_mut() = Some(player);
+    });
+    Ok(())
+}
+
+#[wasm_bindgen]
+pub fn press_key(key: &str) {
+    KEYS_PRESSED.with(|keys| {
+        keys.borrow_mut().insert(key.to_string());
+    });
+}
+
+#[wasm_bindgen]
+pub fn release_key(key: &str) {
+    KEYS_PRESSED.with(|keys| {
+        keys.borrow_mut().remove(key);
+    });
 }

@@ -4,9 +4,11 @@ import init, {
   move_left,
   move_right,
   jump,
-  move_down,
   draw,
-  apply_physics
+  apply_physics,
+  init_player,
+  press_key,
+  release_key,
 } from "../../../rust/pkg/wararar.js";
 
 const GameCanvas = () => {
@@ -26,7 +28,13 @@ const GameCanvas = () => {
   });
 
   useEffect(() => {
-    init().then(() => setReady(true));
+    const setup = async () => {
+      await init();                 // завантаження wasm
+      await init_player();     // створення гравця (чекаємо, поки завантажиться картинка)
+      setReady(true);               // тільки після цього рендеримо кнопку Play
+    };
+
+    setup();
   }, []);
 
   useEffect(() => {
@@ -46,12 +54,14 @@ const GameCanvas = () => {
     const handleKeyDown = (e) => {
       if (keys.current.hasOwnProperty(e.code)) {
         keys.current[e.code] = true;
+        press_key(e.code);
       }
     };
 
     const handleKeyUp = (e) => {
       if (keys.current.hasOwnProperty(e.code)) {
         keys.current[e.code] = false;
+        release_key(e.code);
       }
     };
 
@@ -60,7 +70,6 @@ const GameCanvas = () => {
 
     const interval = setInterval(() => {
       if (keys.current.KeyW || keys.current.ArrowUp) jump();
-      if (keys.current.KeyS || keys.current.ArrowDown) move_down();
       if (keys.current.KeyA || keys.current.ArrowLeft) move_left();
       if (keys.current.KeyD || keys.current.ArrowRight) move_right();
       apply_physics();

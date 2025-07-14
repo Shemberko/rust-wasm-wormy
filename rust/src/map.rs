@@ -8,62 +8,86 @@ pub struct Map {
 
 impl Map {
     pub fn new(canvas_width: f64, canvas_height: f64) -> Self {
-        let tile_size = 10.0;
+        let tile_size = 5.0; // замість 10.0
         let cols = (canvas_width / tile_size).floor() as usize;
         let rows = (canvas_height / tile_size).floor() as usize;
 
         let mut data = vec![vec![0; cols]; rows];
 
-        // 1. Нижні горбочки (синусоїда)
+        // Нижні горбочки (синусоїда) — параметри теж можна підкоригувати, щоб виглядало плавно
         for c in 0..cols {
-            let wave_height = ((c as f64 / 5.0).sin() * 2.0).round() as isize;
+            let wave_height = ((c as f64 / 10.0).sin() * 6.0).round() as isize; // більша амплітуда, довша хвиля
             let base_row = rows as isize - 1;
-            let platform_rows = 2 + wave_height;
+            let platform_rows = 5 + wave_height; // більше "платформ" по висоті
             for r in (base_row - platform_rows + 1)..=base_row {
                 if r >= 0 && (r as usize) < rows {
                     data[r as usize][c] = 1;
                 }
             }
         }
+        let mountain_base_col = 100;
+        let mountain_base_row = rows - 1;
+        let mountain_height = 17;
+        let mountain_width = 30;
 
-        let stair_start_col = 15;
-        let stair_start_row = rows - 5; // трохи над горбками
-        let stair_height = 10;
+        for step in 0..mountain_height {
+            let row = mountain_base_row - step;
+            let col_start = mountain_base_col + step / 2;
+            let col_end = col_start + mountain_width - step;
+            if row >= 0 {
+                for c in col_start..col_end.min(cols) {
+                    data[row][c] = 1;
+                }
+            }
+        }
+        // Сходи — підкоригуй кроки, щоб сходи були плавніші
+        let stair_start_col = 50;
+        let stair_start_row = rows - 20;
+        let stair_height = 40;
         for step in 0..stair_height {
             let row = stair_start_row - step;
-            let col_start = stair_start_col + step * 2;
-            for c in col_start..(col_start + 5) {
-                if row < rows {
+            let col_start = stair_start_col + step * 4; // менші кроки між сходинками
+            for c in col_start..(col_start + 10) {
+                if row < rows && c < cols {
                     data[row][c] = 1;
                 }
             }
         }
 
-        let mid_row = stair_start_row - stair_height - 2;
-        let center_start_col = stair_start_col + stair_height * 2;
-        for c in center_start_col..(center_start_col + 15) {
-            data[mid_row][c] = 1;
+        // Центр платформи
+        let mid_row = stair_start_row - stair_height - 5;
+        let center_start_col = stair_start_col + stair_height * 4;
+        for c in center_start_col..(center_start_col + 30) {
+            if c < cols {
+                data[mid_row][c] = 1;
+            }
         }
 
-        // 4. Додаткові повітряні платформи зліва і справа
-        let side_row = mid_row - 16; // трохи вище
-        let left_start = stair_start_col + 3;
-        let right_start = center_start_col + 20;
+        // Ліві і праві повітряні платформи
+        let side_row = mid_row - 40;
+        let left_start = stair_start_col + 10;
+        let right_start = center_start_col + 40;
 
-        for c in left_start..(left_start + 10) {
-            data[side_row][c] = 1;
+        for c in left_start..(left_start + 20) {
+            if side_row < rows && c < cols {
+                data[side_row][c] = 1;
+            }
         }
 
-        for c in right_start..(right_start + 10) {
-            data[side_row][c] = 1;
+        for c in right_start..(right_start + 20) {
+            if side_row < rows && c < cols {
+                data[side_row][c] = 1;
+            }
         }
 
-        // 5. Маленькі "перепригункові" платформи
-        let jump_row = mid_row - 5;
-        let p_start = center_start_col + 18;
+        // Маленькі платформи
+        let jump_row = mid_row - 10;
+        let p_start = center_start_col + 40;
 
-        for c in p_start..(p_start + 6) {
-            data[jump_row][c] = 1;
+        for c in p_start..(p_start + 12) {
+            if jump_row < rows && c < cols {
+                data[jump_row][c] = 1;
+            }
         }
 
         Self { tile_size, data }
