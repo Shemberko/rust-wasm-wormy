@@ -1,12 +1,14 @@
-use js_sys::Promise;
+    use js_sys::Promise;
 use wasm_bindgen::prelude::Closure;
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{window, CanvasRenderingContext2d, HtmlImageElement};
 
 use crate::animation::Animation;
-use crate::map::Map;
 
+use crate::models::traits::{CanvasObject};
+use crate::models::map::Map;
+use std::collections::HashSet;
 pub struct Player {
     pub x: f64,
     pub y: f64,
@@ -14,39 +16,12 @@ pub struct Player {
     pub width: f64,
     pub height: f64,
     pub animation: Option<Animation>,
+    pub pressed_keys:  HashSet<String>,
+
 }
-
-impl Player {
-    pub fn new() -> Self {
-        let document = window().unwrap().document().unwrap();
-        let img = document
-            .create_element("img")
-            .unwrap()
-            .dyn_into::<HtmlImageElement>()
-            .unwrap();
-
-        img.set_src("animations/NuclearLeak_CharacterAnim_1.2/character_20x20_red.png");
-
-        let animation = Animation::new(
-            img,
-            20.0,
-            20.0,
-            vec![4, 4, 6, 3, 2, 6], // кількість кадрів у рядку
-            0.1,
-            1,
-        );
-
-        Self {
-            x: 100.0,
-            y: 50.0,
-            velocity_y: 0.0,
-            width: 64.0,
-            height: 64.0,
-            animation: Some(animation),
-        }
-    }
-
-    pub fn draw(&self, ctx: &CanvasRenderingContext2d) {
+impl CanvasObject for Player {
+    
+    fn draw(&self, ctx: &CanvasRenderingContext2d) {
         if let Some(anim) = &self.animation {
             anim.draw(ctx, self.x, self.y, self.width, self.height);
         } else {
@@ -55,24 +30,41 @@ impl Player {
         }
     }
 
-    pub fn update(&mut self, delta_time: f64) {
+    fn update(&mut self, delta_time: f64) {
         if let Some(anim) = &mut self.animation {
             anim.update(delta_time);
         }
     }
+}
 
-    pub fn move_left(&mut self, map: &Map) {
+// MovableObject for
+impl  Player{
+    fn change_position(&mut self, dx: f64, dy: f64, map: Map) {
+        self.x += dx;
+        self.y += dy;
+    }
+
+    fn move_left(&mut self, map: &Map) {
         let new_x = self.x - 5.0;
         if map.can_move_to(new_x, self.y, self.width, self.height) {
             self.x = new_x;
         }
     }
 
-    pub fn move_right(&mut self, map: &Map) {
+    fn move_right(&mut self, map: &Map) {
         let new_x = self.x + 5.0;
         if map.can_move_to(new_x, self.y, self.width, self.height) {
             self.x = new_x;
         }
+    }
+
+
+}
+
+// GravityObject for
+impl  Player{
+    pub fn apply_gravity(&mut self, gravity: f64) {
+        self.velocity_y += gravity;
     }
 
     pub fn apply_physics(&mut self, map: &Map, canvas_height: f64) {
@@ -97,8 +89,20 @@ impl Player {
             self.try_move_y(remaining, map, canvas_height);
         }
     }
+    
+    pub fn is_on_ground(&self, map: &Map) -> bool {
+        let feet_y = self.y + self.height + 1.0;
+        let check_points = [self.x, self.x + self.width / 2.0, self.x + self.width - 1.0];
+        for &x in &check_points {
+            if map.is_solid_at(x, feet_y) {
+                return true;
+            }
+        }
+        false
+    }
 
-    fn try_move_y(&mut self, dy: f64, map: &Map, canvas_height: f64) -> bool {
+    
+    pub fn try_move_y(&mut self, dy: f64, map: &Map, canvas_height: f64) -> bool {
         self.y += dy;
 
         if dy > 0.0 && self.is_on_ground(map) {
@@ -132,23 +136,47 @@ impl Player {
         true
     }
 
+}
+
+
+impl Player {
+    pub fn new() -> Self {
+        let document = window().unwrap().document().unwrap();
+        let img = document
+            .create_element("img")
+            .unwrap()
+            .dyn_into::<HtmlImageElement>()
+            .unwrap();
+
+        img.set_src("animations/NuclearLeak_CharacterAnim_1.2/character_20x20_red.png");
+
+        let animation = Animation::new(
+            img,
+            20.0,
+            20.0,
+            vec![4, 4, 6, 3, 2, 6], // кількість кадрів у рядку
+            0.1,
+            1,
+        );
+
+        Self {
+            x: 100.0,
+            y: 50.0,
+            velocity_y: 0.0,
+            width: 64.0,
+            height: 64.0,
+            animation: Some(animation),
+            pressed_keys: HashSet::new(),
+        }
+    }
+
+
     pub fn jump(&mut self, map: &Map, canvas_height: f64) {
         let is_on_ground = self.y + self.height >= canvas_height;
         let is_on_platform = self.is_on_ground(map);
         if is_on_ground || is_on_platform {
             self.velocity_y = -10.0;
         }
-    }
-
-    pub fn is_on_ground(&self, map: &Map) -> bool {
-        let feet_y = self.y + self.height + 1.0;
-        let check_points = [self.x, self.x + self.width / 2.0, self.x + self.width - 1.0];
-        for &x in &check_points {
-            if map.is_solid_at(x, feet_y) {
-                return true;
-            }
-        }
-        false
     }
 
     pub fn set_animation_row(&mut self, row: u32) {
@@ -165,6 +193,10 @@ impl Player {
         } else {
             self.set_animation_row(1); // idle
         }
+    }
+
+    pub fn set_pressed_keys(&mut self, keys: HashSet<String>) {
+        self.pressed_keys = keys;
     }
 }
 
@@ -209,5 +241,7 @@ pub async fn create_player() -> Result<Player, JsValue> {
         width: 64.0,
         height: 64.0,
         animation: Some(animation),
+        pressed_keys: HashSet::new(),
     })
 }
+

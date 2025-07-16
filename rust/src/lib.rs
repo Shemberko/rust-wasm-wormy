@@ -1,9 +1,14 @@
 mod animation;
-mod map;
-mod player;
+
 mod utils;
+mod models;
 
 use std::cell::RefCell;
+use std::rc::Rc;
+
+use crate::models::map::Map;
+use crate::models::player::Player;
+
 use std::collections::HashSet;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::{closure::Closure, JsCast};
@@ -11,8 +16,9 @@ use web_sys::{
     window, CanvasRenderingContext2d, ErrorEvent, Event, HtmlCanvasElement, MessageEvent, WebSocket,
 };
 
-use crate::map::Map;
-use player::Player;
+use crate::models::map;
+use crate::models::game::Game;
+use crate::models::player;
 
 #[wasm_bindgen]
 extern "C" {
@@ -24,10 +30,10 @@ extern "C" {
 // }
 
 thread_local! {
-    static PLAYER: RefCell<Option<Player>> = RefCell::new(None);
-    static KEYS_PRESSED: RefCell<HashSet<String>> = RefCell::new(HashSet::new());
-}
 
+static GAME: RefCell<Option<Game>> = RefCell::new(None);
+static KEYS_PRESSED: RefCell<HashSet<String>> = RefCell::new(HashSet::new());
+}
 #[wasm_bindgen]
 pub fn play() -> Result<(), JsValue> {
     let window = window().unwrap();
@@ -37,12 +43,22 @@ pub fn play() -> Result<(), JsValue> {
         .unwrap()
         .dyn_into::<HtmlCanvasElement>()?;
 
+
+        
+    let canvas_width = canvas.width() as f64;
+    let canvas_height = canvas.height() as f64;
+
     let ctx = canvas
         .get_context("2d")?
         .unwrap()
         .dyn_into::<CanvasRenderingContext2d>()?;
 
     ctx.clear_rect(0.0, 0.0, canvas.width() as f64, canvas.height() as f64);
+
+    GAME.with(|game| {
+        *game.borrow_mut() = Some(Game::new(canvas_width, canvas_height, Rc::new(ctx)));
+    });
+
 
     let img = document
         .create_element("img")?
@@ -96,119 +112,105 @@ pub fn draw() -> Result<(), JsValue> {
 
     ctx.clear_rect(0.0, 0.0, canvas_width, canvas_height);
 
-    let map = Map::new(canvas_width, canvas_height);
-    map.draw(&ctx);
-
-    PLAYER.with(|p| {
-        if let Some(player) = p.borrow().as_ref() {
-            player.draw(&ctx);
-        }
-    });
-
     Ok(())
 }
 
 #[wasm_bindgen]
 pub fn apply_physics() -> Result<(), JsValue> {
+    // TODO make this global
     const GRAVITY: f64 = 0.5;
 
-    let window = window().unwrap();
-    let document = window.document().unwrap();
-    let canvas = document
-        .get_element_by_id("mycanvas")
-        .unwrap()
-        .dyn_into::<HtmlCanvasElement>()?;
+    // TODO  this must be in game and player
+    // PLAYER.with(|p| {
+    //     if let Some(player) = p.borrow_mut().as_mut() {
+    //         let is_on_ground =
+    //             player.is_on_ground(&map) || player.y + player.height >= canvas_height;
+    //         let is_moving = KEYS_PRESSED.with(|keys| {
+    //             let keys = keys.borrow();
+    //             keys.contains("ArrowLeft")
+    //                 || keys.contains("ArrowRight")
+    //                 || keys.contains("KeyA")
+    //                 || keys.contains("KeyD")
+    //         });
 
-    let canvas_width = canvas.width() as f64;
-    let canvas_height = canvas.height() as f64;
-
-    let map = Map::new(canvas_width, canvas_height);
-
-    PLAYER.with(|p| {
-        if let Some(player) = p.borrow_mut().as_mut() {
-            let is_on_ground =
-                player.is_on_ground(&map) || player.y + player.height >= canvas_height;
-            let is_moving = KEYS_PRESSED.with(|keys| {
-                let keys = keys.borrow();
-                keys.contains("ArrowLeft")
-                    || keys.contains("ArrowRight")
-                    || keys.contains("KeyA")
-                    || keys.contains("KeyD")
-            });
-
-            player.update_animation_state(is_moving, is_on_ground);
-            player.apply_physics(&map, canvas_height);
-            player.update(0.016);
-        }
-    });
+    //         player.update_animation_state(is_moving, is_on_ground);
+    //         player.apply_physics(&map, canvas_height);
+    //         player.update(0.016);
+    //     }
+    // });
 
     Ok(())
 }
 
-#[wasm_bindgen]
-pub fn move_left() {
-    let window = window().unwrap();
-    let document = window.document().unwrap();
-    let canvas = document
-        .get_element_by_id("mycanvas")
-        .unwrap()
-        .dyn_into::<HtmlCanvasElement>()
-        .unwrap();
 
-    let map = Map::new(canvas.width() as f64, canvas.height() as f64);
+// TODO make as one function
+// #[wasm_bindgen]
+// pub fn move_left() {
+//     let window = window().unwrap();
+//     let document = window.document().unwrap();
+//     let canvas = document
+//         .get_element_by_id("mycanvas")
+//         .unwrap()
+//         .dyn_into::<HtmlCanvasElement>()
+//         .unwrap();
 
-    PLAYER.with(|p| {
-        if let Some(player) = p.borrow_mut().as_mut() {
-            player.move_left(&map);
-        }
-    });
-}
+//     let map = Map::new(canvas.width() as f64, canvas.height() as f64);
 
-#[wasm_bindgen]
-pub fn move_right() {
-    let window = window().unwrap();
-    let document = window.document().unwrap();
-    let canvas = document
-        .get_element_by_id("mycanvas")
-        .unwrap()
-        .dyn_into::<HtmlCanvasElement>()
-        .unwrap();
+//     PLAYER.with(|p| {
+//         if let Some(player) = p.borrow_mut().as_mut() {
+//             player.move_left(&map);
+//         }
+//     });
+// }
 
-    let map = Map::new(canvas.width() as f64, canvas.height() as f64);
+// #[wasm_bindgen]
+// pub fn move_right() {
+//     let window = window().unwrap();
+//     let document = window.document().unwrap();
+//     let canvas = document
+//         .get_element_by_id("mycanvas")
+//         .unwrap()
+//         .dyn_into::<HtmlCanvasElement>()
+//         .unwrap();
 
-    PLAYER.with(|p| {
-        if let Some(player) = p.borrow_mut().as_mut() {
-            player.move_right(&map);
-        }
-    });
-}
+//     let map = Map::new(canvas.width() as f64, canvas.height() as f64);
 
-#[wasm_bindgen]
-pub fn jump() {
-    let window = window().unwrap();
-    let document = window.document().unwrap();
-    let canvas = document
-        .get_element_by_id("mycanvas")
-        .unwrap()
-        .dyn_into::<HtmlCanvasElement>()
-        .unwrap();
+//     PLAYER.with(|p| {
+//         if let Some(player) = p.borrow_mut().as_mut() {
+//             player.move_right(&map);
+//         }
+//     });
+// }
 
-    let canvas_height = canvas.height() as f64;
-    let canvas_width = canvas.width() as f64;
-    let map = Map::new(canvas_width, canvas_height);
+// #[wasm_bindgen]
+// pub fn jump() {
+//     let window = window().unwrap();
+//     let document = window.document().unwrap();
+//     let canvas = document
+//         .get_element_by_id("mycanvas")
+//         .unwrap()
+//         .dyn_into::<HtmlCanvasElement>()
+//         .unwrap();
 
-    PLAYER.with(|p| {
-        if let Some(player) = p.borrow_mut().as_mut() {
-            player.jump(&map, canvas_height);
-        }
-    });
-}
+//     let canvas_height = canvas.height() as f64;
+//     let canvas_width = canvas.width() as f64;
+//     let map = Map::new(canvas_width, canvas_height);
+
+//     PLAYER.with(|p| {
+//         if let Some(player) = p.borrow_mut().as_mut() {
+//             player.jump(&map, canvas_height);
+//         }
+//     });
+// }
 
 #[wasm_bindgen]
 pub async fn init_player() -> Result<(), JsValue> {
     let player = crate::player::create_player().await?;
-    PLAYER.with(|p| {
-        *p.borrow_mut() = Some(player);
+  
+    GAME.with(|game| {
+        if let Some(ref mut g) = *game.borrow_mut() {
+            g.add_player(player);
+        }
     });
     Ok(())
 }
