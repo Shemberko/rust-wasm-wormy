@@ -1,8 +1,8 @@
 use std::rc::Rc;
 
-use crate::models::player::Player;
 use crate::models::map::Map;
-use crate::models::traits::{CanvasObject};
+use crate::models::player::Player;
+use crate::models::traits::CanvasObject;
 use web_sys::CanvasRenderingContext2d;
 
 pub struct Game {
@@ -43,7 +43,8 @@ impl Game {
     }
 
     pub fn draw(&self) {
-        self.canvas.clear_rect(0.0, 0.0, self.canvas_width, self.canvas_height);
+        self.canvas
+            .clear_rect(0.0, 0.0, self.canvas_width, self.canvas_height);
 
         self.map.draw();
 
@@ -52,25 +53,16 @@ impl Game {
         });
     }
 
-    pub fn get_current_player(&self) -> Option<&Player> {
-        self.players.first()
+    pub fn get_current_player_mut(&mut self) -> Option<&mut Player> {
+        self.players.first_mut()
     }
 
-pub fn update(&mut self) {
-    let map = &self.map;
-    let canvas_height = self.canvas_height;
+    pub fn update(&mut self) {
+        let map = &self.map;
+        let canvas_height = self.canvas_height;
 
-    self.players.iter_mut().for_each(|player| {
-        let is_on_ground =
-            player.is_on_ground(map) || player.y + player.height >= canvas_height;
-        let is_moving = player.pressed_keys.contains("ArrowLeft")
-            || player.pressed_keys.contains("ArrowRight")
-            || player.pressed_keys.contains("KeyA")
-            || player.pressed_keys.contains("KeyD");
-
-        player.update_animation_state(is_moving, is_on_ground);
-        player.apply_physics(map, canvas_height);
-        player.update(0.016);
-    });
-}
+        self.players.iter_mut().for_each(|player| {
+            player.update(0.016, map, canvas_height);
+        });
+    }
 }

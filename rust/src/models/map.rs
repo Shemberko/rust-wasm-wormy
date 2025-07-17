@@ -1,9 +1,7 @@
+use std::rc::Rc;
 
-    use std::rc::Rc;
-
-    use web_sys::CanvasRenderingContext2d;
-    use wasm_bindgen::JsValue;
-
+use wasm_bindgen::JsValue;
+use web_sys::CanvasRenderingContext2d;
 
 pub struct Map {
     pub tile_size: f64,
@@ -12,7 +10,11 @@ pub struct Map {
 }
 
 impl Map {
-    pub fn new(canvas_width: f64, canvas_height: f64, canvas: Rc<CanvasRenderingContext2d>) -> Self {
+    pub fn new(
+        canvas_width: f64,
+        canvas_height: f64,
+        canvas: Rc<CanvasRenderingContext2d>,
+    ) -> Self {
         let tile_size = 5.0; // замість 10.0
         let cols = (canvas_width / tile_size).floor() as usize;
         let rows = (canvas_height / tile_size).floor() as usize;
@@ -93,7 +95,11 @@ impl Map {
             }
         }
 
-        Self { tile_size, data, canvas }
+        Self {
+            tile_size,
+            data,
+            canvas,
+        }
     }
 
     pub fn draw(&self) {
@@ -144,4 +150,3 @@ impl Map {
         false
     }
 }
-

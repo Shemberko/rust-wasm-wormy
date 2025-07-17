@@ -1,10 +1,10 @@
-use web_sys::CanvasRenderingContext2d;
 use crate::animation::Animation;
 use crate::models::map::Map;
+use web_sys::CanvasRenderingContext2d;
 
 pub trait CanvasObject {
     fn draw(&self, ctx: &CanvasRenderingContext2d);
-    fn update(&mut self, delta_time: f64);
+    fn update(&mut self, delta_time: f64, map: &Map, canvas_height: f64);
 }
 
 pub trait GravityObject: CanvasObject {
@@ -15,7 +15,7 @@ pub trait GravityObject: CanvasObject {
 pub trait MovableObject: CanvasObject {
     fn change_position(&mut self, dx: f64, dy: f64);
     fn move_left(&mut self, map: Map);
-    fn move_right(&mut self, map: Map); 
+    fn move_right(&mut self, map: Map);
     fn move_up(&mut self, map: Map);
     fn move_down(&mut self, map: Map);
     fn try_move_y(&mut self, dy: f64, map: &Map);

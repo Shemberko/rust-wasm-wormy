@@ -1,14 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import init, {
   play,
-  move_left,
-  move_right,
-  jump,
-  draw,
-  apply_physics,
+  update,
+  resize,
   init_player,
-  press_key,
-  release_key,
 } from "../../../rust/pkg/wararar.js";
 
 const GameCanvas = () => {
@@ -25,13 +20,14 @@ const GameCanvas = () => {
     KeyS: false,
     KeyA: false,
     KeyD: false,
+    Space: false,
   });
 
   useEffect(() => {
     const setup = async () => {
-      await init();                 // завантаження wasm
-      await init_player();     // створення гравця (чекаємо, поки завантажиться картинка)
-      setReady(true);               // тільки після цього рендеримо кнопку Play
+      await init();
+      await init_player();
+      setReady(true);
     };
 
     setup();
@@ -40,12 +36,19 @@ const GameCanvas = () => {
   useEffect(() => {
     if (!ready || !isPlaying) return;
 
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
     const resizeCanvas = () => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+
       canvas.width = window.innerWidth - 40;
       canvas.height = window.innerHeight - 200;
+
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.imageSmoothingEnabled = false;
+      }
+
+      resize(canvas.width, canvas.height);
     };
 
     resizeCanvas();
@@ -54,14 +57,12 @@ const GameCanvas = () => {
     const handleKeyDown = (e) => {
       if (keys.current.hasOwnProperty(e.code)) {
         keys.current[e.code] = true;
-        press_key(e.code);
       }
     };
 
     const handleKeyUp = (e) => {
       if (keys.current.hasOwnProperty(e.code)) {
         keys.current[e.code] = false;
-        release_key(e.code);
       }
     };
 
@@ -69,11 +70,11 @@ const GameCanvas = () => {
     window.addEventListener("keyup", handleKeyUp);
 
     const interval = setInterval(() => {
-      if (keys.current.KeyW || keys.current.ArrowUp) jump();
-      if (keys.current.KeyA || keys.current.ArrowLeft) move_left();
-      if (keys.current.KeyD || keys.current.ArrowRight) move_right();
-      apply_physics();
-      draw();
+      const pressedKeysArray = Object.entries(keys.current)
+        .filter(([_, pressed]) => pressed)
+        .map(([key]) => key);
+
+      update(pressedKeysArray);
     }, 16);
 
     try {

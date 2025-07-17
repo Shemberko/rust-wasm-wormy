@@ -32,7 +32,17 @@ impl Animation {
         }
     }
 
-    pub fn update(&mut self, delta_time: f64) {
+    pub fn update(&mut self, delta_time: f64, velocity_y: f64) {
+        if self.animation_row == 3 {
+            if velocity_y < 0.0 {
+                self.current_frame = 1;
+            } else {
+                self.current_frame = 2;
+            }
+            self.timer = 0.0;
+            return;
+        }
+
         self.timer += delta_time;
         if self.timer >= self.frame_duration {
             self.timer = 0.0;

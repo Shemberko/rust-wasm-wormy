@@ -1,4 +1,4 @@
-    use js_sys::Promise;
+use js_sys::Promise;
 use wasm_bindgen::prelude::Closure;
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::JsFuture;
@@ -6,8 +6,9 @@ use web_sys::{window, CanvasRenderingContext2d, HtmlImageElement};
 
 use crate::animation::Animation;
 
-use crate::models::traits::{CanvasObject};
 use crate::models::map::Map;
+use crate::models::traits::CanvasObject;
+use rand::Rng;
 use std::collections::HashSet;
 pub struct Player {
     pub x: f64,
@@ -16,29 +17,69 @@ pub struct Player {
     pub width: f64,
     pub height: f64,
     pub animation: Option<Animation>,
-    pub pressed_keys:  HashSet<String>,
-
+    pub pressed_keys: HashSet<String>,
+    pub facing_left: bool,
 }
 impl CanvasObject for Player {
-    
     fn draw(&self, ctx: &CanvasRenderingContext2d) {
-        if let Some(anim) = &self.animation {
-            anim.draw(ctx, self.x, self.y, self.width, self.height);
+        ctx.save();
+
+        if self.facing_left {
+            let _ = ctx.translate(self.x + self.width, self.y);
+            let _ = ctx.scale(-1.0, 1.0);
+            if let Some(anim) = &self.animation {
+                anim.draw(ctx, 0.0, 0.0, self.width, self.height);
+            } else {
+                ctx.set_fill_style(&JsValue::from_str("blue").into());
+                ctx.fill_rect(0.0, 0.0, self.width, self.height);
+            }
         } else {
-            ctx.set_fill_style(&JsValue::from_str("blue"));
-            ctx.fill_rect(self.x, self.y, self.width, self.height);
+            if let Some(anim) = &self.animation {
+                anim.draw(ctx, self.x, self.y, self.width, self.height);
+            } else {
+                ctx.set_fill_style(&JsValue::from_str("blue").into());
+                ctx.fill_rect(self.x, self.y, self.width, self.height);
+            }
         }
+
+        ctx.restore();
     }
 
-    fn update(&mut self, delta_time: f64) {
+    fn update(&mut self, delta_time: f64, map: &Map, canvas_height: f64) {
+        let is_on_ground = self.is_on_ground(map) || self.y + self.height >= canvas_height;
+        let is_moving = self.pressed_keys.contains("ArrowLeft")
+            || self.pressed_keys.contains("ArrowRight")
+            || self.pressed_keys.contains("KeyA")
+            || self.pressed_keys.contains("KeyD");
+
+        if self.pressed_keys.contains("ArrowLeft") || self.pressed_keys.contains("KeyA") {
+            self.facing_left = true;
+            self.move_left(map);
+        }
+
+        if self.pressed_keys.contains("ArrowRight") || self.pressed_keys.contains("KeyD") {
+            self.facing_left = false;
+            self.move_right(map);
+        }
+
+        if (self.pressed_keys.contains("Space")
+            || self.pressed_keys.contains("KeyW")
+            || self.pressed_keys.contains("ArrowUp"))
+            && is_on_ground
+        {
+            self.jump(map, canvas_height);
+        }
+
+        self.update_animation_state(is_moving, is_on_ground);
+        self.apply_physics(map, canvas_height);
         if let Some(anim) = &mut self.animation {
-            anim.update(delta_time);
+            anim.update(delta_time, self.velocity_y);
         }
     }
 }
 
 // MovableObject for
-impl  Player{
+impl Player {
     fn change_position(&mut self, dx: f64, dy: f64, map: Map) {
         self.x += dx;
         self.y += dy;
@@ -57,12 +98,10 @@ impl  Player{
             self.x = new_x;
         }
     }
-
-
 }
 
 // GravityObject for
-impl  Player{
+impl Player {
     pub fn apply_gravity(&mut self, gravity: f64) {
         self.velocity_y += gravity;
     }
@@ -89,7 +128,7 @@ impl  Player{
             self.try_move_y(remaining, map, canvas_height);
         }
     }
-    
+
     pub fn is_on_ground(&self, map: &Map) -> bool {
         let feet_y = self.y + self.height + 1.0;
         let check_points = [self.x, self.x + self.width / 2.0, self.x + self.width - 1.0];
@@ -101,7 +140,6 @@ impl  Player{
         false
     }
 
-    
     pub fn try_move_y(&mut self, dy: f64, map: &Map, canvas_height: f64) -> bool {
         self.y += dy;
 
@@ -135,9 +173,7 @@ impl  Player{
 
         true
     }
-
 }
-
 
 impl Player {
     pub fn new() -> Self {
@@ -148,7 +184,19 @@ impl Player {
             .dyn_into::<HtmlImageElement>()
             .unwrap();
 
-        img.set_src("animations/NuclearLeak_CharacterAnim_1.2/character_20x20_red.png");
+        // Available colors for the player
+        let colors = [
+            "black", "blue", "brown", "cyan", "green", "lime", "orange", "pink", "purple", "red",
+            "white", "yellow",
+        ];
+        // Pick a random color
+        let mut rng = rand::thread_rng();
+        let color = colors[rng.gen_range(0..colors.len())];
+        let src = format!(
+            "animations/NuclearLeak_CharacterAnim_1.2/character_20x20_{}.png",
+            color
+        );
+        img.set_src(&src);
 
         let animation = Animation::new(
             img,
@@ -167,9 +215,9 @@ impl Player {
             height: 64.0,
             animation: Some(animation),
             pressed_keys: HashSet::new(),
+            facing_left: false,
         }
     }
-
 
     pub fn jump(&mut self, map: &Map, canvas_height: f64) {
         let is_on_ground = self.y + self.height >= canvas_height;
@@ -221,7 +269,17 @@ pub async fn create_player() -> Result<Player, JsValue> {
         img.set_onerror(Some(onerror.unchecked_ref()));
     });
 
-    img.set_src("/animations/NuclearLeak_CharacterAnim_1.2/character_20x20_red.png");
+    let colors = [
+        "black", "blue", "brown", "cyan", "green", "lime", "orange", "pink", "purple", "red",
+        "white", "yellow",
+    ];
+    let mut rng = rand::thread_rng();
+    let color = colors[rng.gen_range(0..colors.len())];
+    let src = format!(
+        "animations/NuclearLeak_CharacterAnim_1.2/character_20x20_{}.png",
+        color
+    );
+    img.set_src(&src);
 
     JsFuture::from(promise).await?;
 
@@ -235,13 +293,13 @@ pub async fn create_player() -> Result<Player, JsValue> {
     );
 
     Ok(Player {
-        x: 100.0,
+        x: 50.0,
         y: 50.0,
         velocity_y: 0.0,
         width: 64.0,
         height: 64.0,
         animation: Some(animation),
         pressed_keys: HashSet::new(),
+        facing_left: false,
     })
 }
-

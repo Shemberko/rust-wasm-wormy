@@ -1,14 +1,15 @@
 mod animation;
 
-mod utils;
 mod models;
+mod utils;
 
 use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::models::map::Map;
-use crate::models::player::Player;
+use crate::models::player::create_player;
 
+use js_sys::Array;
 use std::collections::HashSet;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::{closure::Closure, JsCast};
@@ -16,7 +17,6 @@ use web_sys::{
     window, CanvasRenderingContext2d, ErrorEvent, Event, HtmlCanvasElement, MessageEvent, WebSocket,
 };
 
-use crate::models::map;
 use crate::models::game::Game;
 use crate::models::player;
 
@@ -25,17 +25,12 @@ extern "C" {
     fn alert(s: &str);
 }
 
-// thread_local! {
-//     static PLAYER: RefCell<Player> = RefCell::new(Player::new());
-// }
-
 thread_local! {
-
-static GAME: RefCell<Option<Game>> = RefCell::new(None);
-static KEYS_PRESSED: RefCell<HashSet<String>> = RefCell::new(HashSet::new());
+    static GAME: RefCell<Option<Game>> = RefCell::new(None);
 }
+
 #[wasm_bindgen]
-pub fn play() -> Result<(), JsValue> {
+pub async fn play() -> Result<(), JsValue> {
     let window = window().unwrap();
     let document = window.document().unwrap();
     let canvas = document
@@ -43,8 +38,6 @@ pub fn play() -> Result<(), JsValue> {
         .unwrap()
         .dyn_into::<HtmlCanvasElement>()?;
 
-
-        
     let canvas_width = canvas.width() as f64;
     let canvas_height = canvas.height() as f64;
 
@@ -52,6 +45,7 @@ pub fn play() -> Result<(), JsValue> {
         .get_context("2d")?
         .unwrap()
         .dyn_into::<CanvasRenderingContext2d>()?;
+    ctx.set_image_smoothing_enabled(false);
 
     ctx.clear_rect(0.0, 0.0, canvas.width() as f64, canvas.height() as f64);
 
@@ -59,11 +53,14 @@ pub fn play() -> Result<(), JsValue> {
         *game.borrow_mut() = Some(Game::new(canvas_width, canvas_height, Rc::new(ctx)));
     });
 
+    let player = create_player().await?;
 
-    let img = document
-        .create_element("img")?
-        .dyn_into::<web_sys::HtmlImageElement>()?;
-    img.set_src("/animations/NuclearLeak_CharacterAnim_1.2/character_20x20_red.png");
+    GAME.with(|game| {
+        if let Some(g) = &mut *game.borrow_mut() {
+            g.add_player(player);
+            g.draw();
+        }
+    });
 
     // 🌐 Підключення WebSocket
     let ws = WebSocket::new("ws://127.0.0.1:3000/ws")?; // заміни IP, якщо потрібно
@@ -116,97 +113,30 @@ pub fn draw() -> Result<(), JsValue> {
 }
 
 #[wasm_bindgen]
-pub fn apply_physics() -> Result<(), JsValue> {
-    // TODO make this global
-    const GRAVITY: f64 = 0.5;
-
-    // TODO  this must be in game and player
-    // PLAYER.with(|p| {
-    //     if let Some(player) = p.borrow_mut().as_mut() {
-    //         let is_on_ground =
-    //             player.is_on_ground(&map) || player.y + player.height >= canvas_height;
-    //         let is_moving = KEYS_PRESSED.with(|keys| {
-    //             let keys = keys.borrow();
-    //             keys.contains("ArrowLeft")
-    //                 || keys.contains("ArrowRight")
-    //                 || keys.contains("KeyA")
-    //                 || keys.contains("KeyD")
-    //         });
-
-    //         player.update_animation_state(is_moving, is_on_ground);
-    //         player.apply_physics(&map, canvas_height);
-    //         player.update(0.016);
-    //     }
-    // });
+pub fn update(pressed_keys: Array) -> Result<(), JsValue> {
+    GAME.with(|game| {
+        if let Some(g) = &mut *game.borrow_mut() {
+            if let Some(player) = g.get_current_player_mut() {
+                let mut keys_set = HashSet::new();
+                for key in pressed_keys.iter() {
+                    if let Some(s) = key.as_string() {
+                        keys_set.insert(s);
+                    }
+                }
+                player.set_pressed_keys(keys_set);
+            }
+            g.update();
+            g.draw();
+        }
+    });
 
     Ok(())
 }
 
-
-// TODO make as one function
-// #[wasm_bindgen]
-// pub fn move_left() {
-//     let window = window().unwrap();
-//     let document = window.document().unwrap();
-//     let canvas = document
-//         .get_element_by_id("mycanvas")
-//         .unwrap()
-//         .dyn_into::<HtmlCanvasElement>()
-//         .unwrap();
-
-//     let map = Map::new(canvas.width() as f64, canvas.height() as f64);
-
-//     PLAYER.with(|p| {
-//         if let Some(player) = p.borrow_mut().as_mut() {
-//             player.move_left(&map);
-//         }
-//     });
-// }
-
-// #[wasm_bindgen]
-// pub fn move_right() {
-//     let window = window().unwrap();
-//     let document = window.document().unwrap();
-//     let canvas = document
-//         .get_element_by_id("mycanvas")
-//         .unwrap()
-//         .dyn_into::<HtmlCanvasElement>()
-//         .unwrap();
-
-//     let map = Map::new(canvas.width() as f64, canvas.height() as f64);
-
-//     PLAYER.with(|p| {
-//         if let Some(player) = p.borrow_mut().as_mut() {
-//             player.move_right(&map);
-//         }
-//     });
-// }
-
-// #[wasm_bindgen]
-// pub fn jump() {
-//     let window = window().unwrap();
-//     let document = window.document().unwrap();
-//     let canvas = document
-//         .get_element_by_id("mycanvas")
-//         .unwrap()
-//         .dyn_into::<HtmlCanvasElement>()
-//         .unwrap();
-
-//     let canvas_height = canvas.height() as f64;
-//     let canvas_width = canvas.width() as f64;
-//     let map = Map::new(canvas_width, canvas_height);
-
-//     PLAYER.with(|p| {
-//         if let Some(player) = p.borrow_mut().as_mut() {
-//             player.jump(&map, canvas_height);
-//         }
-//     });
-// }
-
 #[wasm_bindgen]
 pub async fn init_player() -> Result<(), JsValue> {
     let player = crate::player::create_player().await?;
-  
+
     GAME.with(|game| {
         if let Some(ref mut g) = *game.borrow_mut() {
             g.add_player(player);
@@ -216,15 +146,13 @@ pub async fn init_player() -> Result<(), JsValue> {
 }
 
 #[wasm_bindgen]
-pub fn press_key(key: &str) {
-    KEYS_PRESSED.with(|keys| {
-        keys.borrow_mut().insert(key.to_string());
+pub fn resize(width: f64, height: f64) -> Result<(), JsValue> {
+    GAME.with(|game| {
+        if let Some(g) = &mut *game.borrow_mut() {
+            g.canvas_width = width;
+            g.canvas_height = height;
+            g.map = Map::new(width, height, Rc::clone(&g.canvas));
+        }
     });
-}
-
-#[wasm_bindgen]
-pub fn release_key(key: &str) {
-    KEYS_PRESSED.with(|keys| {
-        keys.borrow_mut().remove(key);
-    });
+    Ok(())
 }
