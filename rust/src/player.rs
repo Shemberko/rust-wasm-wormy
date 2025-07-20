@@ -6,72 +6,110 @@ use web_sys::{window, CanvasRenderingContext2d, HtmlImageElement};
 
 use crate::animation::Animation;
 use crate::map::Map;
+use crate::models::position::Position;
 
 pub struct Player {
-    pub x: f64,
-    pub y: f64,
+    pub position: Position,
     pub velocity_y: f64,
     pub width: f64,
     pub height: f64,
+    pub horizontal_offset: f64,
     pub animation: Option<Animation>,
+    pub pressed_keys: HashSet<String>,
+    pub facing_left: bool,
 }
+impl CanvasObject for Player {
+    fn draw(&self, ctx: &CanvasRenderingContext2d) {
+        ctx.save();
+        let draw_x = self.position.x - self.horizontal_offset;
 
-impl Player {
-    pub fn new() -> Self {
-        let document = window().unwrap().document().unwrap();
-        let img = document
-            .create_element("img")
-            .unwrap()
-            .dyn_into::<HtmlImageElement>()
-            .unwrap();
-
-        img.set_src("animations/NuclearLeak_CharacterAnim_1.2/character_20x20_red.png");
-
-        let animation = Animation::new(
-            img,
-            20.0,
-            20.0,
-            vec![4, 4, 6, 3, 2, 6], // кількість кадрів у рядку
-            0.1,
-            1,
-        );
-
-        Self {
-            x: 100.0,
-            y: 50.0,
-            velocity_y: 0.0,
-            width: 64.0,
-            height: 64.0,
-            animation: Some(animation),
-        }
-    }
-
-    pub fn draw(&self, ctx: &CanvasRenderingContext2d) {
-        if let Some(anim) = &self.animation {
-            anim.draw(ctx, self.x, self.y, self.width, self.height);
+        if self.facing_left {
+            let _ = ctx.translate(
+                self.position.x + self.width - self.horizontal_offset,
+                self.position.y,
+            );
+            let _ = ctx.scale(-1.0, 1.0);
+            if let Some(anim) = &self.animation {
+                anim.draw(
+                    ctx,
+                    0.0,
+                    0.0,
+                    self.width + self.horizontal_offset * 2.0,
+                    self.height,
+                );
+            } else {
+                ctx.set_fill_style(&JsValue::from_str("blue").into());
+                ctx.fill_rect(0.0, 0.0, self.width, self.height);
+            }
         } else {
-            ctx.set_fill_style(&JsValue::from_str("blue"));
-            ctx.fill_rect(self.x, self.y, self.width, self.height);
+            if let Some(anim) = &self.animation {
+                anim.draw(
+                    ctx,
+                    draw_x,
+                    self.position.y,
+                    self.width + self.horizontal_offset * 2.0,
+                    self.height,
+                );
+            } else {
+                ctx.set_fill_style(&JsValue::from_str("blue").into());
+                ctx.fill_rect(self.position.x, self.position.y, self.width, self.height);
+            }
         }
+
+        ctx.restore();
     }
 
-    pub fn update(&mut self, delta_time: f64) {
+    fn update(&mut self, delta_time: f64, map: &Map, canvas_height: f64) {
+        let is_on_ground = self.is_on_ground(map) || self.position.y + self.height >= canvas_height;
+        let is_moving = self.pressed_keys.contains("ArrowLeft")
+            || self.pressed_keys.contains("ArrowRight")
+            || self.pressed_keys.contains("KeyA")
+            || self.pressed_keys.contains("KeyD");
+
+        if self.pressed_keys.contains("ArrowLeft") || self.pressed_keys.contains("KeyA") {
+            self.facing_left = true;
+            self.move_left(map);
+        }
+
+        if self.pressed_keys.contains("ArrowRight") || self.pressed_keys.contains("KeyD") {
+            self.facing_left = false;
+            self.move_right(map);
+        }
+
+        if (self.pressed_keys.contains("Space")
+            || self.pressed_keys.contains("KeyW")
+            || self.pressed_keys.contains("ArrowUp"))
+            && is_on_ground
+        {
+            self.jump(map, canvas_height);
+        }
+
+        self.update_animation_state(is_moving, is_on_ground);
+        self.apply_physics(map, canvas_height);
         if let Some(anim) = &mut self.animation {
             anim.update(delta_time);
         }
     }
+}
 
-    pub fn move_left(&mut self, map: &Map) {
-        let new_x = self.x - 5.0;
-        if map.can_move_to(new_x, self.y, self.width, self.height) {
-            self.x = new_x;
+// MovableObject for
+impl Player {
+    fn change_position(&mut self, dx: f64, dy: f64, map: Map) {
+        self.position.x += dx;
+        self.position.y += dy;
+    }
+
+    fn move_left(&mut self, map: &Map) {
+        let new_x = self.position.x - 5.0;
+        if map.can_move_to(new_x, self.position.y, self.width, self.height) {
+            self.position.x = new_x;
         }
     }
 
-    pub fn move_right(&mut self, map: &Map) {
-        let new_x = self.x + 5.0;
-        if map.can_move_to(new_x, self.y, self.width, self.height) {
-            self.x = new_x;
+    fn move_right(&mut self, map: &Map) {
+        let new_x = self.position.x + 5.0;
+        if map.can_move_to(new_x, self.position.y, self.width, self.height) {
+            self.position.x = new_x;
         }
     }
 
@@ -98,51 +136,13 @@ impl Player {
         }
     }
 
-    fn try_move_y(&mut self, dy: f64, map: &Map, canvas_height: f64) -> bool {
-        self.y += dy;
-
-        if dy > 0.0 && self.is_on_ground(map) {
-            let feet_y = self.y + self.height + 1.0;
-            let tile_row = (feet_y / map.tile_size).floor();
-            self.y = tile_row * map.tile_size - self.height;
-            return false;
-        }
-
-        if dy < 0.0 {
-            let head_y = self.y;
-            let check_points = [
-                self.x + 1.0,
-                self.x + self.width / 2.0,
-                self.x + self.width - 1.0,
-            ];
-            for &px in &check_points {
-                if map.is_solid_at(px, head_y) {
-                    let tile_row = (head_y / map.tile_size).floor();
-                    self.y = (tile_row + 1.0) * map.tile_size;
-                    return false;
-                }
-            }
-        }
-
-        if self.y + self.height >= canvas_height {
-            self.y = canvas_height - self.height;
-            return false;
-        }
-
-        true
-    }
-
-    pub fn jump(&mut self, map: &Map, canvas_height: f64) {
-        let is_on_ground = self.y + self.height >= canvas_height;
-        let is_on_platform = self.is_on_ground(map);
-        if is_on_ground || is_on_platform {
-            self.velocity_y = -10.0;
-        }
-    }
-
     pub fn is_on_ground(&self, map: &Map) -> bool {
-        let feet_y = self.y + self.height + 1.0;
-        let check_points = [self.x, self.x + self.width / 2.0, self.x + self.width - 1.0];
+        let feet_y = self.position.y + self.height + 1.0;
+        let check_points = [
+            self.position.x,
+            self.position.x + self.width / 2.0,
+            self.position.x + self.width - 1.0,
+        ];
         for &x in &check_points {
             if map.is_solid_at(x, feet_y) {
                 return true;
@@ -151,6 +151,92 @@ impl Player {
         false
     }
 
+    pub fn try_move_y(&mut self, dy: f64, map: &Map, canvas_height: f64) -> bool {
+        self.position.y += dy;
+
+        if dy > 0.0 && self.is_on_ground(map) {
+            let feet_y = self.position.y + self.height + 1.0;
+            let tile_row = (feet_y / map.tile_size).floor();
+            self.position.y = tile_row * map.tile_size - self.height;
+            return false;
+        }
+
+        if dy < 0.0 {
+            let head_y = self.position.y;
+            let check_points = [
+                self.position.x + 1.0,
+                self.position.x + self.width / 2.0,
+                self.position.x + self.width - 1.0,
+            ];
+            for &px in &check_points {
+                if map.is_solid_at(px, head_y) {
+                    let tile_row = (head_y / map.tile_size).floor();
+                    self.position.y = (tile_row + 1.0) * map.tile_size;
+                    return false;
+                }
+            }
+        }
+
+        if self.position.y + self.height >= canvas_height {
+            self.position.y = canvas_height - self.height;
+            return false;
+        }
+
+        true
+    }
+}
+
+impl Player {
+    pub fn new() -> Self {
+        let document = window().unwrap().document().unwrap();
+        let img = document
+            .create_element("img")
+            .unwrap()
+            .dyn_into::<HtmlImageElement>()
+            .unwrap();
+
+        // Available colors for the player
+        let colors = [
+            "black", "blue", "brown", "cyan", "green", "lime", "orange", "pink", "purple", "red",
+            "white", "yellow",
+        ];
+        // Pick a random color
+        let mut rng = rand::thread_rng();
+        let color = colors[rng.gen_range(0..colors.len())];
+        let src = format!(
+            "animations/NuclearLeak_CharacterAnim_1.2/character_20x20_{}.png",
+            color
+        );
+        img.set_src(&src);
+
+        let animation = Animation::new(
+            img,
+            20.0,
+            20.0,
+            vec![4, 4, 6, 3, 2, 6], // кількість кадрів у рядку
+            0.1,
+            1,
+        );
+
+        Self {
+            position: Position { x: 100.0, y: 50.0 },
+            velocity_y: 0.0,
+            width: 64.0,
+            height: 64.0,
+            horizontal_offset: 22.0,
+            animation: Some(animation),
+            pressed_keys: HashSet::new(),
+            facing_left: false,
+        }
+    }
+
+    pub fn jump(&mut self, map: &Map, canvas_height: f64) {
+        let is_on_ground = self.position.y + self.height >= canvas_height;
+        let is_on_platform = self.is_on_ground(map);
+        if is_on_ground || is_on_platform {
+            self.velocity_y = -10.0;
+        }
+    }
     pub fn set_animation_row(&mut self, row: u32) {
         if let Some(anim) = &mut self.animation {
             anim.set_animation_row(row as usize);
@@ -203,11 +289,11 @@ pub async fn create_player() -> Result<Player, JsValue> {
     );
 
     Ok(Player {
-        x: 100.0,
-        y: 50.0,
+        position: Position { x: 50.0, y: 50.0 },
         velocity_y: 0.0,
         width: 64.0,
         height: 64.0,
+        horizontal_offset: 22.0,
         animation: Some(animation),
     })
 }

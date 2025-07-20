@@ -1,6 +1,6 @@
-struct Position {
-    x: f64,
-    y: f64,
+pub(crate) struct Position {
+    pub(crate) x: f64,
+    pub(crate) y: f64,
 }
 
 impl Position {
