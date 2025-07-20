@@ -5,9 +5,12 @@ use wasm_bindgen_futures::JsFuture;
 use web_sys::{window, CanvasRenderingContext2d, HtmlImageElement};
 
 use crate::animation::Animation;
-use crate::map::Map;
 use crate::models::position::Position;
 
+use crate::models::map::Map;
+use crate::models::traits::CanvasObject;
+use rand::Rng;
+use std::collections::HashSet;
 pub struct Player {
     pub position: Position,
     pub velocity_y: f64,
@@ -87,7 +90,7 @@ impl CanvasObject for Player {
         self.update_animation_state(is_moving, is_on_ground);
         self.apply_physics(map, canvas_height);
         if let Some(anim) = &mut self.animation {
-            anim.update(delta_time);
+            anim.update(delta_time, self.velocity_y);
         }
     }
 }
@@ -111,6 +114,13 @@ impl Player {
         if map.can_move_to(new_x, self.position.y, self.width, self.height) {
             self.position.x = new_x;
         }
+    }
+}
+
+// GravityObject for
+impl Player {
+    pub fn apply_gravity(&mut self, gravity: f64) {
+        self.velocity_y += gravity;
     }
 
     pub fn apply_physics(&mut self, map: &Map, canvas_height: f64) {
@@ -252,6 +262,10 @@ impl Player {
             self.set_animation_row(1); // idle
         }
     }
+
+    pub fn set_pressed_keys(&mut self, keys: HashSet<String>) {
+        self.pressed_keys = keys;
+    }
 }
 
 pub async fn create_player() -> Result<Player, JsValue> {
@@ -275,7 +289,17 @@ pub async fn create_player() -> Result<Player, JsValue> {
         img.set_onerror(Some(onerror.unchecked_ref()));
     });
 
-    img.set_src("/animations/NuclearLeak_CharacterAnim_1.2/character_20x20_red.png");
+    let colors = [
+        "black", "blue", "brown", "cyan", "green", "lime", "orange", "pink", "purple", "red",
+        "white", "yellow",
+    ];
+    let mut rng = rand::thread_rng();
+    let color = colors[rng.gen_range(0..colors.len())];
+    let src = format!(
+        "animations/NuclearLeak_CharacterAnim_1.2/character_20x20_{}.png",
+        color
+    );
+    img.set_src(&src);
 
     JsFuture::from(promise).await?;
 
@@ -295,5 +319,7 @@ pub async fn create_player() -> Result<Player, JsValue> {
         height: 64.0,
         horizontal_offset: 22.0,
         animation: Some(animation),
+        pressed_keys: HashSet::new(),
+        facing_left: false,
     })
 }

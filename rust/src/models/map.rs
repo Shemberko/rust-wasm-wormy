@@ -1,13 +1,20 @@
+use std::rc::Rc;
+
 use wasm_bindgen::JsValue;
 use web_sys::CanvasRenderingContext2d;
 
 pub struct Map {
     pub tile_size: f64,
     pub data: Vec<Vec<u8>>,
+    pub canvas: Rc<CanvasRenderingContext2d>,
 }
 
 impl Map {
-    pub fn new(canvas_width: f64, canvas_height: f64) -> Self {
+    pub fn new(
+        canvas_width: f64,
+        canvas_height: f64,
+        canvas: Rc<CanvasRenderingContext2d>,
+    ) -> Self {
         let tile_size = 5.0; // замість 10.0
         let cols = (canvas_width / tile_size).floor() as usize;
         let rows = (canvas_height / tile_size).floor() as usize;
@@ -40,13 +47,13 @@ impl Map {
                 }
             }
         }
-        // Сходи — підкоригуй кроки, щоб сходи були плавніші
+
         let stair_start_col = 50;
         let stair_start_row = rows - 20;
         let stair_height = 40;
         for step in 0..stair_height {
             let row = stair_start_row - step;
-            let col_start = stair_start_col + step * 4; // менші кроки між сходинками
+            let col_start = stair_start_col + step * 4;
             for c in col_start..(col_start + 10) {
                 if row < rows && c < cols {
                     data[row][c] = 1;
@@ -54,7 +61,6 @@ impl Map {
             }
         }
 
-        // Центр платформи
         let mid_row = stair_start_row - stair_height - 5;
         let center_start_col = stair_start_col + stair_height * 4;
         for c in center_start_col..(center_start_col + 30) {
@@ -63,7 +69,6 @@ impl Map {
             }
         }
 
-        // Ліві і праві повітряні платформи
         let side_row = mid_row - 40;
         let left_start = stair_start_col + 10;
         let right_start = center_start_col + 40;
@@ -90,17 +95,21 @@ impl Map {
             }
         }
 
-        Self { tile_size, data }
+        Self {
+            tile_size,
+            data,
+            canvas,
+        }
     }
 
-    pub fn draw(&self, ctx: &CanvasRenderingContext2d) {
-        ctx.set_fill_style(&JsValue::from_str("green"));
+    pub fn draw(&self) {
+        self.canvas.set_fill_style(&JsValue::from_str("green"));
         for (row_idx, row) in self.data.iter().enumerate() {
             for (col_idx, &tile) in row.iter().enumerate() {
                 if tile == 1 {
                     let x = col_idx as f64 * self.tile_size;
                     let y = row_idx as f64 * self.tile_size;
-                    ctx.fill_rect(x, y, self.tile_size, self.tile_size);
+                    self.canvas.fill_rect(x, y, self.tile_size, self.tile_size);
                 }
             }
         }
