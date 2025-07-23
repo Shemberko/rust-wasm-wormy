@@ -14,7 +14,8 @@ use std::collections::HashSet;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::{closure::Closure, JsCast};
 use web_sys::{
-    window, CanvasRenderingContext2d, ErrorEvent, Event, HtmlCanvasElement, MessageEvent, WebSocket,
+    window, CanvasRenderingContext2d, ErrorEvent, Event, HtmlCanvasElement, ImageData,
+    MessageEvent, WebSocket,
 };
 
 use crate::models::game::Game;
@@ -47,10 +48,12 @@ pub async fn play() -> Result<(), JsValue> {
         .dyn_into::<CanvasRenderingContext2d>()?;
     ctx.set_image_smoothing_enabled(false);
 
-    ctx.clear_rect(0.0, 0.0, canvas.width() as f64, canvas.height() as f64);
-
     GAME.with(|game| {
-        *game.borrow_mut() = Some(Game::new(canvas_width, canvas_height, Rc::new(ctx)));
+        *game.borrow_mut() = Some(Game::new(
+            canvas_width as u32,
+            canvas_height as u32,
+            Rc::new(ctx),
+        ));
     });
 
     let player = create_player().await?;
@@ -149,10 +152,18 @@ pub async fn init_player() -> Result<(), JsValue> {
 pub fn resize(width: f64, height: f64) -> Result<(), JsValue> {
     GAME.with(|game| {
         if let Some(g) = &mut *game.borrow_mut() {
-            g.canvas_width = width;
-            g.canvas_height = height;
-            g.map = Map::new(width, height, Rc::clone(&g.canvas));
+            g.canvas_width = width as u32;
+            g.canvas_height = height as u32;
         }
     });
     Ok(())
+}
+
+#[wasm_bindgen]
+pub fn set_image_data(data: ImageData) {
+    GAME.with(|game| {
+        if let Some(g) = &mut *game.borrow_mut() {
+            g.map.image_data = data;
+        }
+    });
 }

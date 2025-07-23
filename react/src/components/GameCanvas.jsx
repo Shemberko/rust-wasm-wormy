@@ -4,7 +4,9 @@ import init, {
   update,
   resize,
   init_player,
+  set_image_data
 } from "../../../rust/pkg/wararar.js";
+import backgroundImage from '../../assets/tile_ground.png';
 
 const GameCanvas = () => {
   const canvasRef = useRef(null);
@@ -36,19 +38,56 @@ const GameCanvas = () => {
   useEffect(() => {
     if (!ready || !isPlaying) return;
 
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext("2d");
+
+    if (!canvas || !ctx) return;
+
+    const img = new Image();
+    img.src = backgroundImage;
+
+    img.onload = () => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+
+      const scale = canvas.height / img.height;
+      const scaledWidth = img.width * scale;
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, img.width, img.height, 0, 0, scaledWidth, canvas.height);
+
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      set_image_data(imageData);
+    };
+
+
     const resizeCanvas = () => {
       const canvas = canvasRef.current;
       if (!canvas) return;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
 
       canvas.width = window.innerWidth - 40;
       canvas.height = window.innerHeight - 200;
+      ctx.imageSmoothingEnabled = false;
 
-      const ctx = canvas.getContext("2d");
-      if (ctx) {
-        ctx.imageSmoothingEnabled = false;
-      }
+      const img = new Image();
+      img.src = backgroundImage;
+      img.onload = () => {
+        const scale = canvas.height / img.height;
+        const scaledWidth = img.width * scale;
 
-      resize(canvas.width, canvas.height);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, img.width, img.height, 0, 0, scaledWidth, canvas.height);
+
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        set_image_data(imageData);
+
+        // Тільки після цього викликаємо resize в Rust, щоб оновити розміри
+        resize(canvas.width, canvas.height);
+      };
     };
 
     resizeCanvas();

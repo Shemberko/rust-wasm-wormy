@@ -5,7 +5,7 @@ use wasm_bindgen_futures::JsFuture;
 use web_sys::{window, CanvasRenderingContext2d, HtmlImageElement};
 
 use crate::animation::Animation;
-use crate::models::position::Position;
+use crate::models::position::{self, Position};
 
 use crate::models::map::Map;
 use crate::models::traits::CanvasObject;
@@ -16,7 +16,6 @@ pub struct Player {
     pub velocity_y: f64,
     pub width: f64,
     pub height: f64,
-    pub horizontal_offset: f64,
     pub animation: Option<Animation>,
     pub pressed_keys: HashSet<String>,
     pub facing_left: bool,
@@ -24,22 +23,12 @@ pub struct Player {
 impl CanvasObject for Player {
     fn draw(&self, ctx: &CanvasRenderingContext2d) {
         ctx.save();
-        let draw_x = self.position.x - self.horizontal_offset;
 
         if self.facing_left {
-            let _ = ctx.translate(
-                self.position.x + self.width - self.horizontal_offset,
-                self.position.y,
-            );
+            let _ = ctx.translate(self.position.x + self.width, self.position.y);
             let _ = ctx.scale(-1.0, 1.0);
             if let Some(anim) = &self.animation {
-                anim.draw(
-                    ctx,
-                    0.0,
-                    0.0,
-                    self.width + self.horizontal_offset * 2.0,
-                    self.height,
-                );
+                anim.draw(ctx, 0.0, 0.0, self.width, self.height);
             } else {
                 ctx.set_fill_style(&JsValue::from_str("blue").into());
                 ctx.fill_rect(0.0, 0.0, self.width, self.height);
@@ -48,9 +37,9 @@ impl CanvasObject for Player {
             if let Some(anim) = &self.animation {
                 anim.draw(
                     ctx,
-                    draw_x,
+                    self.position.x,
                     self.position.y,
-                    self.width + self.horizontal_offset * 2.0,
+                    self.width,
                     self.height,
                 );
             } else {
@@ -86,11 +75,31 @@ impl CanvasObject for Player {
         {
             self.jump(map, canvas_height);
         }
+        // Console log player position
 
+        let position = position::Position {
+            x: self.position.x,
+            y: self.position.y,
+        };
         self.update_animation_state(is_moving, is_on_ground);
         self.apply_physics(map, canvas_height);
+
+        // if (self.pressed_keys.contains("Space")
+        //     || self.pressed_keys.contains("KeyW")
+        //     || self.pressed_keys.contains("ArrowUp"))
+        // //&& is_on_ground
+        // {
+        //     web_sys::console::log_1(
+        //         &format!(
+        //             "Player position: x = {}, y = {} |||| x1 = {}, y1 = {}",
+        //             position.x, position.y, self.position.x, self.position.y
+        //         )
+        //         .into(),
+        //     );
+        // }
+
         if let Some(anim) = &mut self.animation {
-            anim.update(delta_time, self.velocity_y);
+            anim.update(delta_time, is_moving, is_on_ground, self.velocity_y);
         }
     }
 }
@@ -104,14 +113,14 @@ impl Player {
 
     fn move_left(&mut self, map: &Map) {
         let new_x = self.position.x - 5.0;
-        if map.can_move_to(new_x, self.position.y, self.width, self.height) {
+        if self.can_move_horizontally(new_x, map) {
             self.position.x = new_x;
         }
     }
 
     fn move_right(&mut self, map: &Map) {
         let new_x = self.position.x + 5.0;
-        if map.can_move_to(new_x, self.position.y, self.width, self.height) {
+        if self.can_move_horizontally(new_x, map) {
             self.position.x = new_x;
         }
     }
@@ -148,15 +157,16 @@ impl Player {
 
     pub fn is_on_ground(&self, map: &Map) -> bool {
         let feet_y = self.position.y + self.height + 1.0;
-        let check_points = [
-            self.position.x,
-            self.position.x + self.width / 2.0,
-            self.position.x + self.width - 1.0,
-        ];
-        for &x in &check_points {
+        let mut x = self.position.x;
+        while x <= self.position.x + self.width {
             if map.is_solid_at(x, feet_y) {
                 return true;
             }
+            x += 8.0;
+        }
+        // Also check the very right edge in case width is not a multiple of 4
+        if map.is_solid_at(self.position.x + self.width - 1.0, feet_y) {
+            return true;
         }
         false
     }
@@ -165,9 +175,15 @@ impl Player {
         self.position.y += dy;
 
         if dy > 0.0 && self.is_on_ground(map) {
-            let feet_y = self.position.y + self.height + 1.0;
-            let tile_row = (feet_y / map.tile_size).floor();
-            self.position.y = tile_row * map.tile_size - self.height;
+            // do-while: move up until not on ground
+            loop {
+                self.position.y -= 0.1;
+                if !self.is_on_ground(map) {
+                    self.position.y += 0.1;
+                    break;
+                }
+            }
+            self.velocity_y = 0.0;
             return false;
         }
 
@@ -180,8 +196,8 @@ impl Player {
             ];
             for &px in &check_points {
                 if map.is_solid_at(px, head_y) {
-                    let tile_row = (head_y / map.tile_size).floor();
-                    self.position.y = (tile_row + 1.0) * map.tile_size;
+                    self.position.y = head_y.ceil();
+
                     return false;
                 }
             }
@@ -192,6 +208,30 @@ impl Player {
             return false;
         }
 
+        if self.position.y < 0.0 {
+            self.position.y = 0.0;
+            return false;
+        }
+
+        true
+    }
+
+    fn can_move_horizontally(&self, x: f64, map: &Map) -> bool {
+        let top = self.position.y + 1.0;
+        let bottom = self.position.y + self.height - 1.0;
+
+        let check_points = [(x, top), (x, bottom)];
+
+        let left = x;
+        let right = x + self.width;
+
+        for &y in &[top, bottom] {
+            if !map.is_solid_at(left, y) && !map.is_solid_at(right, y) {
+                continue;
+            } else {
+                return false;
+            }
+        }
         true
     }
 }
@@ -233,7 +273,6 @@ impl Player {
             velocity_y: 0.0,
             width: 64.0,
             height: 64.0,
-            horizontal_offset: 22.0,
             animation: Some(animation),
             pressed_keys: HashSet::new(),
             facing_left: false,
@@ -317,7 +356,6 @@ pub async fn create_player() -> Result<Player, JsValue> {
         velocity_y: 0.0,
         width: 64.0,
         height: 64.0,
-        horizontal_offset: 22.0,
         animation: Some(animation),
         pressed_keys: HashSet::new(),
         facing_left: false,

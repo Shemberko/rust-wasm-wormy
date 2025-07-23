@@ -10,17 +10,23 @@ pub struct Game {
     pub players: Vec<Player>,
     pub objects: Vec<Box<dyn CanvasObject>>,
     pub canvas: Rc<CanvasRenderingContext2d>,
-    pub canvas_width: f64,
-    pub canvas_height: f64,
+    pub canvas_width: u32,
+    pub canvas_height: u32,
 }
 
 impl Game {
     pub fn new(
-        canvas_width: f64,
-        canvas_height: f64,
+        canvas_width: u32,
+        canvas_height: u32,
         canvas: Rc<CanvasRenderingContext2d>,
     ) -> Self {
-        let map = Map::new(canvas_width, canvas_height, Rc::clone(&canvas));
+        let map = Map::new(
+            canvas_width,
+            canvas_height,
+            Rc::clone(&canvas),
+            canvas_width,
+            canvas_height,
+        );
         let players = Vec::new();
         let objects: Vec<Box<dyn CanvasObject>> = Vec::new();
 
@@ -43,8 +49,12 @@ impl Game {
     }
 
     pub fn draw(&self) {
-        self.canvas
-            .clear_rect(0.0, 0.0, self.canvas_width, self.canvas_height);
+        self.canvas.clear_rect(
+            0.0,
+            0.0,
+            self.canvas_width as f64,
+            self.canvas_height as f64,
+        );
 
         self.map.draw();
 
@@ -62,7 +72,7 @@ impl Game {
         let canvas_height = self.canvas_height;
 
         self.players.iter_mut().for_each(|player| {
-            player.update(0.016, map, canvas_height);
+            player.update(0.016, map, canvas_height as f64);
         });
     }
 }
