@@ -8,7 +8,9 @@ use crate::animation::Animation;
 use crate::models::position::{self, Position};
 
 use crate::models::map::Map;
-use crate::models::traits::CanvasObject;
+use crate::models::traits::{
+    AnimatedObject, CanvasObject, GravityObject, InputControlledObject, MovableObject,
+};
 use rand::Rng;
 use std::collections::HashSet;
 pub struct Player {
@@ -20,83 +22,29 @@ pub struct Player {
     pub pressed_keys: HashSet<String>,
     pub facing_left: bool,
 }
+
 impl CanvasObject for Player {
     fn draw(&self, ctx: &CanvasRenderingContext2d) {
         ctx.save();
-
         if self.facing_left {
             let _ = ctx.translate(self.position.x + self.width, self.position.y);
             let _ = ctx.scale(-1.0, 1.0);
-            if let Some(anim) = &self.animation {
-                anim.draw(ctx, 0.0, 0.0, self.width, self.height);
-            } else {
-                ctx.set_fill_style(&JsValue::from_str("blue").into());
-                ctx.fill_rect(0.0, 0.0, self.width, self.height);
-            }
+            self.draw_animation(ctx, 0.0, 0.0);
         } else {
-            if let Some(anim) = &self.animation {
-                anim.draw(
-                    ctx,
-                    self.position.x,
-                    self.position.y,
-                    self.width,
-                    self.height,
-                );
-            } else {
-                ctx.set_fill_style(&JsValue::from_str("blue").into());
-                ctx.fill_rect(self.position.x, self.position.y, self.width, self.height);
-            }
+            self.draw_animation(ctx, self.position.x, self.position.y);
         }
-
         ctx.restore();
     }
 
     fn update(&mut self, delta_time: f64, map: &Map, canvas_height: f64) {
-        let is_on_ground = self.is_on_ground(map) || self.position.y + self.height >= canvas_height;
-        let is_moving = self.pressed_keys.contains("ArrowLeft")
-            || self.pressed_keys.contains("ArrowRight")
-            || self.pressed_keys.contains("KeyA")
-            || self.pressed_keys.contains("KeyD");
+        let is_on_ground = self.check_if_on_ground(map, canvas_height);
+        let is_moving = self.is_moving_horizontally();
 
-        if self.pressed_keys.contains("ArrowLeft") || self.pressed_keys.contains("KeyA") {
-            self.facing_left = true;
-            self.move_left(map);
-        }
+        self.handle_horizontal_movement(map, canvas_height);
+        self.handle_jump(map, canvas_height, is_on_ground);
 
-        if self.pressed_keys.contains("ArrowRight") || self.pressed_keys.contains("KeyD") {
-            self.facing_left = false;
-            self.move_right(map);
-        }
-
-        if (self.pressed_keys.contains("Space")
-            || self.pressed_keys.contains("KeyW")
-            || self.pressed_keys.contains("ArrowUp"))
-            && is_on_ground
-        {
-            self.jump(map, canvas_height);
-        }
-        // Console log player position
-
-        let position = position::Position {
-            x: self.position.x,
-            y: self.position.y,
-        };
         self.update_animation_state(is_moving, is_on_ground);
         self.apply_physics(map, canvas_height);
-
-        // if (self.pressed_keys.contains("Space")
-        //     || self.pressed_keys.contains("KeyW")
-        //     || self.pressed_keys.contains("ArrowUp"))
-        // //&& is_on_ground
-        // {
-        //     web_sys::console::log_1(
-        //         &format!(
-        //             "Player position: x = {}, y = {} |||| x1 = {}, y1 = {}",
-        //             position.x, position.y, self.position.x, self.position.y
-        //         )
-        //         .into(),
-        //     );
-        // }
 
         if let Some(anim) = &mut self.animation {
             anim.update(delta_time, is_moving, is_on_ground, self.velocity_y);
@@ -104,39 +52,77 @@ impl CanvasObject for Player {
     }
 }
 
-// MovableObject for
-impl Player {
-    fn change_position(&mut self, dx: f64, dy: f64, map: Map) {
-        self.position.x += dx;
+impl MovableObject for Player {
+    fn change_position(&mut self, dx: f64, dy: f64, map: &Map, canvas_height: f64) {
+        if dx != 0.0 {
+            let new_x = self.position.x + dx;
+            if self.can_move_horizontally(new_x, map) {
+                self.position.x = new_x;
+            }
+        }
+
+        if dy != 0.0 {
+            let new_y = self.position.y + dy;
+
+            if new_y + self.height >= canvas_height {
+                self.position.y = canvas_height - self.height;
+            } else if new_y < 0.0 {
+                self.position.y = 0.0;
+            } else {
+                self.position.y = new_y;
+            }
+        }
+    }
+
+    fn try_move_y(&mut self, dy: f64, map: &Map, canvas_height: f64) -> bool {
         self.position.y += dy;
+
+        if dy > 0.0 && self.handle_ground_collision(map) {
+            return false;
+        }
+
+        if dy < 0.0 && self.handle_ceiling_collision(map) {
+            return false;
+        }
+
+        if self.check_vertical_bounds(canvas_height) {
+            return false;
+        }
+
+        true
     }
 
-    fn move_left(&mut self, map: &Map) {
-        let new_x = self.position.x - 5.0;
-        if self.can_move_horizontally(new_x, map) {
-            self.position.x = new_x;
-        }
-    }
+    fn can_move_horizontally(&self, x: f64, map: &Map) -> bool {
+        let top = self.position.y + 1.0;
+        let bottom = self.position.y + self.height - 1.0;
 
-    fn move_right(&mut self, map: &Map) {
-        let new_x = self.position.x + 5.0;
-        if self.can_move_horizontally(new_x, map) {
-            self.position.x = new_x;
+        let left = x;
+        let right = x + self.width;
+
+        for &y in &[top, bottom] {
+            if !map.is_solid_at(left, y) && !map.is_solid_at(right, y) {
+                continue;
+            } else {
+                return false;
+            }
         }
+        true
     }
 }
 
-// GravityObject for
-impl Player {
-    pub fn apply_gravity(&mut self, gravity: f64) {
-        self.velocity_y += gravity;
+impl GravityObject for Player {
+    fn apply_physics(&mut self, map: &Map, canvas_height: f64) {
+        self.apply_gravity();
+        self.apply_vertical_movement(map, canvas_height);
     }
 
-    pub fn apply_physics(&mut self, map: &Map, canvas_height: f64) {
+    fn apply_gravity(&mut self) {
         const GRAVITY: f64 = 0.5;
-        const MAX_STEP: f64 = 1.0; // субкрок — не більше 1px за раз
-
         self.velocity_y += GRAVITY;
+    }
+
+    fn apply_vertical_movement(&mut self, map: &Map, canvas_height: f64) {
+        const MAX_STEP: f64 = 1.0; // субкрок — не більше 1px за раз
 
         let mut remaining = self.velocity_y;
         let step = MAX_STEP.copysign(self.velocity_y); // +1 або -1
@@ -155,7 +141,7 @@ impl Player {
         }
     }
 
-    pub fn is_on_ground(&self, map: &Map) -> bool {
+    fn is_on_ground(&self, map: &Map) -> bool {
         let feet_y = self.position.y + self.height + 1.0;
         let mut x = self.position.x;
         while x <= self.position.x + self.width {
@@ -171,11 +157,8 @@ impl Player {
         false
     }
 
-    pub fn try_move_y(&mut self, dy: f64, map: &Map, canvas_height: f64) -> bool {
-        self.position.y += dy;
-
-        if dy > 0.0 && self.is_on_ground(map) {
-            // do-while: move up until not on ground
+    fn handle_ground_collision(&mut self, map: &Map) -> bool {
+        if self.is_on_ground(map) {
             loop {
                 self.position.y -= 0.1;
                 if !self.is_on_ground(map) {
@@ -184,115 +167,50 @@ impl Player {
                 }
             }
             self.velocity_y = 0.0;
-            return false;
+            true
+        } else {
+            false
         }
-
-        if dy < 0.0 {
-            let head_y = self.position.y;
-            let check_points = [
-                self.position.x + 1.0,
-                self.position.x + self.width / 2.0,
-                self.position.x + self.width - 1.0,
-            ];
-            for &px in &check_points {
-                if map.is_solid_at(px, head_y) {
-                    self.position.y = head_y.ceil();
-
-                    return false;
-                }
-            }
-        }
-
-        if self.position.y + self.height >= canvas_height {
-            self.position.y = canvas_height - self.height;
-            return false;
-        }
-
-        if self.position.y < 0.0 {
-            self.position.y = 0.0;
-            return false;
-        }
-
-        true
     }
 
-    fn can_move_horizontally(&self, x: f64, map: &Map) -> bool {
-        let top = self.position.y + 1.0;
-        let bottom = self.position.y + self.height - 1.0;
+    fn handle_ceiling_collision(&mut self, map: &Map) -> bool {
+        let head_y = self.position.y;
+        let check_points = [
+            self.position.x + 1.0,
+            self.position.x + self.width / 2.0,
+            self.position.x + self.width - 1.0,
+        ];
 
-        let check_points = [(x, top), (x, bottom)];
-
-        let left = x;
-        let right = x + self.width;
-
-        for &y in &[top, bottom] {
-            if !map.is_solid_at(left, y) && !map.is_solid_at(right, y) {
-                continue;
-            } else {
-                return false;
+        for &px in &check_points {
+            if map.is_solid_at(px, head_y) {
+                self.position.y = head_y.ceil();
+                return true;
             }
         }
-        true
+        false
+    }
+
+    fn check_vertical_bounds(&mut self, canvas_height: f64) -> bool {
+        if self.position.y + self.height >= canvas_height {
+            self.position.y = canvas_height - self.height;
+            return true;
+        }
+        if self.position.y < 0.0 {
+            self.position.y = 0.0;
+            return true;
+        }
+        false
     }
 }
 
-impl Player {
-    pub fn new() -> Self {
-        let document = window().unwrap().document().unwrap();
-        let img = document
-            .create_element("img")
-            .unwrap()
-            .dyn_into::<HtmlImageElement>()
-            .unwrap();
-
-        // Available colors for the player
-        let colors = [
-            "black", "blue", "brown", "cyan", "green", "lime", "orange", "pink", "purple", "red",
-            "white", "yellow",
-        ];
-        // Pick a random color
-        let mut rng = rand::thread_rng();
-        let color = colors[rng.gen_range(0..colors.len())];
-        let src = format!(
-            "animations/NuclearLeak_CharacterAnim_1.2/character_20x20_{}.png",
-            color
-        );
-        img.set_src(&src);
-
-        let animation = Animation::new(
-            img,
-            20.0,
-            20.0,
-            vec![4, 4, 6, 3, 2, 6], // кількість кадрів у рядку
-            0.1,
-            1,
-        );
-
-        Self {
-            position: Position { x: 100.0, y: 50.0 },
-            velocity_y: 0.0,
-            width: 64.0,
-            height: 64.0,
-            animation: Some(animation),
-            pressed_keys: HashSet::new(),
-            facing_left: false,
-        }
-    }
-
-    pub fn jump(&mut self, map: &Map, canvas_height: f64) {
-        let is_on_ground = self.position.y + self.height >= canvas_height;
-        let is_on_platform = self.is_on_ground(map);
-        if is_on_ground || is_on_platform {
-            self.velocity_y = -10.0;
-        }
-    }
-    pub fn set_animation_row(&mut self, row: u32) {
+impl AnimatedObject for Player {
+    fn set_animation_row(&mut self, row: u32) {
         if let Some(anim) = &mut self.animation {
             anim.set_animation_row(row as usize);
         }
     }
 
-    pub fn update_animation_state(&mut self, is_moving: bool, is_on_ground: bool) {
+    fn update_animation_state(&mut self, is_moving: bool, is_on_ground: bool) {
         if !is_on_ground {
             self.set_animation_row(3); // jump / falling
         } else if is_moving {
@@ -302,62 +220,115 @@ impl Player {
         }
     }
 
-    pub fn set_pressed_keys(&mut self, keys: HashSet<String>) {
-        self.pressed_keys = keys;
+    fn draw_animation(&self, ctx: &CanvasRenderingContext2d, x: f64, y: f64) {
+        if let Some(anim) = &self.animation {
+            anim.draw(ctx, x, y, self.width, self.height);
+        } else {
+            ctx.set_fill_style(&JsValue::from_str("blue"));
+            ctx.fill_rect(x, y, self.width, self.height);
+        }
     }
 }
 
-pub async fn create_player() -> Result<Player, JsValue> {
-    let document = window().unwrap().document().unwrap();
-    let img = document
-        .create_element("img")?
-        .dyn_into::<HtmlImageElement>()?;
+impl InputControlledObject for Player {
+    fn is_moving_horizontally(&self) -> bool {
+        self.is_left_pressed() || self.is_right_pressed()
+    }
 
-    let promise = Promise::new(&mut |resolve, reject| {
-        let onload = Closure::once_into_js(move || {
-            resolve.call0(&JsValue::NULL).unwrap();
+    fn is_left_pressed(&self) -> bool {
+        self.pressed_keys.contains("ArrowLeft") || self.pressed_keys.contains("KeyA")
+    }
+
+    fn is_right_pressed(&self) -> bool {
+        self.pressed_keys.contains("ArrowRight") || self.pressed_keys.contains("KeyD")
+    }
+
+    fn is_jump_pressed(&self) -> bool {
+        self.pressed_keys.contains("Space")
+            || self.pressed_keys.contains("KeyW")
+            || self.pressed_keys.contains("ArrowUp")
+    }
+
+    fn handle_horizontal_movement(&mut self, map: &Map, canvas_height: f64) {
+        const MOVE_SPEED: f64 = 5.0;
+        if self.is_left_pressed() {
+            self.facing_left = true;
+            self.change_position(-MOVE_SPEED, 0.0, map, canvas_height);
+        }
+
+        if self.is_right_pressed() {
+            self.facing_left = false;
+            self.change_position(MOVE_SPEED, 0.0, map, canvas_height);
+        }
+    }
+
+    fn handle_jump(&mut self, map: &Map, canvas_height: f64, is_on_ground: bool) {
+        if self.is_jump_pressed() && is_on_ground {
+            self.jump(map, canvas_height);
+        }
+    }
+}
+
+impl Player {
+    pub async fn new() -> Result<Player, JsValue> {
+        let document = window().unwrap().document().unwrap();
+        let img = document
+            .create_element("img")?
+            .dyn_into::<HtmlImageElement>()?;
+
+        let promise = Promise::new(&mut |resolve, reject| {
+            let onload = Closure::once_into_js(move || {
+                resolve.call0(&JsValue::NULL).unwrap();
+            });
+
+            let onerror = Closure::once_into_js(move || {
+                reject
+                    .call1(&JsValue::NULL, &JsValue::from_str("Image failed to load"))
+                    .unwrap();
+            });
+
+            img.set_onload(Some(onload.unchecked_ref()));
+            img.set_onerror(Some(onerror.unchecked_ref()));
         });
 
-        let onerror = Closure::once_into_js(move || {
-            reject
-                .call1(&JsValue::NULL, &JsValue::from_str("Image failed to load"))
-                .unwrap();
-        });
+        let colors = [
+            "black", "blue", "brown", "cyan", "green", "lime", "orange", "pink", "purple", "red",
+            "white", "yellow",
+        ];
+        let mut rng = rand::thread_rng();
+        let color = colors[rng.gen_range(0..colors.len())];
+        let src = format!(
+            "animations/NuclearLeak_CharacterAnim_1.2/character_20x20_{}.png",
+            color
+        );
+        img.set_src(&src);
 
-        img.set_onload(Some(onload.unchecked_ref()));
-        img.set_onerror(Some(onerror.unchecked_ref()));
-    });
+        JsFuture::from(promise).await?;
 
-    let colors = [
-        "black", "blue", "brown", "cyan", "green", "lime", "orange", "pink", "purple", "red",
-        "white", "yellow",
-    ];
-    let mut rng = rand::thread_rng();
-    let color = colors[rng.gen_range(0..colors.len())];
-    let src = format!(
-        "animations/NuclearLeak_CharacterAnim_1.2/character_20x20_{}.png",
-        color
-    );
-    img.set_src(&src);
+        let animation = Animation::new(img, 20.0, 20.0, vec![4, 4, 6, 3, 2, 6], 0.1, 1);
 
-    JsFuture::from(promise).await?;
+        Ok(Player {
+            position: Position { x: 50.0, y: 50.0 },
+            velocity_y: 0.0,
+            width: 64.0,
+            height: 64.0,
+            animation: Some(animation),
+            pressed_keys: HashSet::new(),
+            facing_left: false,
+        })
+    }
 
-    let animation = Animation::new(
-        img,
-        20.0,
-        20.0,
-        vec![4, 4, 6, 3, 2, 6], // кількість кадрів у рядку
-        0.1,
-        1,
-    );
+    pub fn jump(&mut self, map: &Map, canvas_height: f64) {
+        if self.check_if_on_ground(map, canvas_height) {
+            self.velocity_y = -10.0;
+        }
+    }
 
-    Ok(Player {
-        position: Position { x: 50.0, y: 50.0 },
-        velocity_y: 0.0,
-        width: 64.0,
-        height: 64.0,
-        animation: Some(animation),
-        pressed_keys: HashSet::new(),
-        facing_left: false,
-    })
+    pub fn set_pressed_keys(&mut self, keys: HashSet<String>) {
+        self.pressed_keys = keys;
+    }
+
+    fn check_if_on_ground(&self, map: &Map, canvas_height: f64) -> bool {
+        self.is_on_ground(map) || self.position.y + self.height >= canvas_height
+    }
 }

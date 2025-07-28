@@ -6,8 +6,7 @@ mod utils;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::models::map::Map;
-use crate::models::player::create_player;
+use crate::models::player::Player;
 
 use js_sys::Array;
 use std::collections::HashSet;
@@ -56,7 +55,7 @@ pub async fn play() -> Result<(), JsValue> {
         ));
     });
 
-    let player = create_player().await?;
+    let player = Player::new().await?;
 
     GAME.with(|game| {
         if let Some(g) = &mut *game.borrow_mut() {
@@ -138,7 +137,7 @@ pub fn update(pressed_keys: Array) -> Result<(), JsValue> {
 
 #[wasm_bindgen]
 pub async fn init_player() -> Result<(), JsValue> {
-    let player = crate::player::create_player().await?;
+    let player = crate::player::Player::new().await?;
 
     GAME.with(|game| {
         if let Some(ref mut g) = *game.borrow_mut() {
