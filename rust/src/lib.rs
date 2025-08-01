@@ -6,15 +6,17 @@ mod utils;
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::models::bullet::Bullet;
 use crate::models::player::Player;
 
+use gloo_timers::future::TimeoutFuture;
 use js_sys::Array;
 use std::collections::HashSet;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::{closure::Closure, JsCast};
 use web_sys::{
-    window, CanvasRenderingContext2d, ErrorEvent, Event, HtmlCanvasElement, ImageData,
-    MessageEvent, WebSocket,
+    window, CanvasRenderingContext2d, ErrorEvent, Event, HtmlCanvasElement, HtmlImageElement,
+    ImageData, MessageEvent, WebSocket,
 };
 
 use crate::models::game::Game;
@@ -165,4 +167,42 @@ pub fn set_image_data(data: ImageData) {
             g.map.image_data = data;
         }
     });
+}
+
+#[wasm_bindgen]
+pub async fn shoot() -> Result<(), JsValue> {
+    let bullet_img = Bullet::load_bullet_image().await?;
+
+    GAME.with(|game| {
+        if let Some(g) = &mut *game.borrow_mut() {
+            if let Some(player) = g.get_current_player_mut() {
+                if let Some(weapon) = &mut player.weapon {
+                    weapon.current_anim = "shoot".to_string();
+                    weapon.animations.get_mut("shoot").unwrap().reset();
+                }
+            }
+        }
+    });
+
+    TimeoutFuture::new(150).await;
+
+    GAME.with(|game| {
+        if let Some(g) = &mut *game.borrow_mut() {
+            if let Some(player) = g.get_current_player_mut() {
+                let bullet_x = if player.facing_left {
+                    player.position.x
+                } else {
+                    player.position.x + player.width
+                };
+                let bullet_y = player.position.y + 40.0;
+
+                let bullet =
+                    Bullet::new(bullet_x, bullet_y, player.facing_left, bullet_img.clone());
+
+                g.bullets.push(bullet);
+            }
+        }
+    });
+
+    Ok(())
 }

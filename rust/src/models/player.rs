@@ -6,6 +6,7 @@ use web_sys::{window, CanvasRenderingContext2d, HtmlImageElement};
 
 use crate::animation::Animation;
 use crate::models::position::{self, Position};
+use crate::models::weapon::Weapon;
 
 use crate::models::map::Map;
 use crate::models::traits::{
@@ -21,6 +22,7 @@ pub struct Player {
     pub animation: Option<Animation>,
     pub pressed_keys: HashSet<String>,
     pub facing_left: bool,
+    pub weapon: Option<Weapon>,
 }
 
 impl CanvasObject for Player {
@@ -34,6 +36,9 @@ impl CanvasObject for Player {
             self.draw_animation(ctx, self.position.x, self.position.y);
         }
         ctx.restore();
+        if let Some(weapon) = &self.weapon {
+            weapon.draw(ctx);
+        }
     }
 
     fn update(&mut self, delta_time: f64, map: &Map, canvas_height: f64) {
@@ -48,6 +53,12 @@ impl CanvasObject for Player {
 
         if let Some(anim) = &mut self.animation {
             anim.update(delta_time, is_moving, is_on_ground, self.velocity_y);
+        }
+
+        if let Some(weapon) = &mut self.weapon {
+            weapon.update_position(self.position.x, self.position.y, self.facing_left);
+            weapon.update(delta_time, map, canvas_height);
+            weapon.update_animation_state(is_moving, is_on_ground);
         }
     }
 }
@@ -306,6 +317,21 @@ impl Player {
         JsFuture::from(promise).await?;
 
         let animation = Animation::new(img, 20.0, 20.0, vec![4, 4, 6, 3, 2, 6], 0.1, 1);
+        let weapon = Weapon::new(
+            50.0,
+            50.0,
+            vec![
+                (
+                    "idle".to_string(),
+                    "animations/guns/[IDLE] AK 47.png".to_string(),
+                ),
+                (
+                    "shoot".to_string(),
+                    "animations/guns/[SHOOT WITH MUZZLE FLASH] AK 47.png".to_string(),
+                ),
+            ],
+        )
+        .await?;
 
         Ok(Player {
             position: Position { x: 50.0, y: 50.0 },
@@ -315,6 +341,7 @@ impl Player {
             animation: Some(animation),
             pressed_keys: HashSet::new(),
             facing_left: false,
+            weapon: Some(weapon),
         })
     }
 

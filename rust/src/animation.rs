@@ -82,4 +82,14 @@ impl Animation {
             self.timer = 0.0;
         }
     }
+
+    pub fn is_finished(&self) -> bool {
+        let last_frame = self.frame_counts[self.animation_row] - 1;
+        self.current_frame == last_frame && self.timer == 0.0
+    }
+
+    pub fn reset(&mut self) {
+        self.current_frame = 0;
+        self.timer = 0.0;
+    }
 }
