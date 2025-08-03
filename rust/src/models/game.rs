@@ -1,5 +1,6 @@
 use std::rc::Rc;
 
+use crate::models::bullet::Bullet;
 use crate::models::map::Map;
 use crate::models::player::Player;
 use crate::models::traits::CanvasObject;
@@ -12,6 +13,7 @@ pub struct Game {
     pub canvas: Rc<CanvasRenderingContext2d>,
     pub canvas_width: u32,
     pub canvas_height: u32,
+    pub bullets: Vec<Bullet>,
 }
 
 impl Game {
@@ -37,6 +39,7 @@ impl Game {
             canvas,
             canvas_width,
             canvas_height,
+            bullets: Vec::new(),
         }
     }
 
@@ -61,6 +64,10 @@ impl Game {
         self.players.iter().for_each(|player| {
             player.draw(&self.canvas);
         });
+
+        for bullet in &self.bullets {
+            bullet.draw(&self.canvas);
+        }
     }
 
     pub fn get_current_player_mut(&mut self) -> Option<&mut Player> {
@@ -74,5 +81,10 @@ impl Game {
         self.players.iter_mut().for_each(|player| {
             player.update(0.016, map, canvas_height as f64);
         });
+
+        for bullet in &mut self.bullets {
+            bullet.update(0.016, map, canvas_height as f64);
+        }
+        self.bullets.retain(|b| b.is_active);
     }
 }

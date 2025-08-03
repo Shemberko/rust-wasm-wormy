@@ -4,7 +4,8 @@ import init, {
   update,
   resize,
   init_player,
-  set_image_data
+  set_image_data,
+  shoot
 } from "../../../rust/pkg/wararar.js";
 import backgroundImage from '../../assets/tile_ground.png';
 
@@ -134,6 +135,12 @@ const GameCanvas = () => {
     setIsPlaying(true);
   };
 
+  const handleClick = () => {
+    if (ready && isPlaying) {
+      shoot();
+    }
+  };
+
   return (
     <div style={{ textAlign: "center" }}>
       {!ready ? (
@@ -144,6 +151,7 @@ const GameCanvas = () => {
         <canvas
           ref={canvasRef}
           id="mycanvas"
+          onClick={handleClick}
           style={{ border: "1px solid black", margin: "20px" }}
         />
       )}

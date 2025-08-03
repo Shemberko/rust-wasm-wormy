@@ -1,4 +1,3 @@
-use crate::animation::Animation;
 use crate::models::map::Map;
 use web_sys::CanvasRenderingContext2d;
 
