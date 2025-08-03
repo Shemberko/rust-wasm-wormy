@@ -55,12 +55,38 @@ const GameCanvas = () => {
 
       const scale = canvas.height / img.height;
       const scaledWidth = img.width * scale;
-
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(img, 0, 0, img.width, img.height, 0, 0, scaledWidth, canvas.height);
 
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      set_image_data(imageData);
+      // Load three images and combine them side by side
+      const img1 = new Image();
+  
+      img1.src = backgroundImage;
+    
+
+      img1.onload = () => {
+        // Ensure all images are loaded
+        if (!img1.complete) return;
+
+        const totalWidth = img1.width;
+        const maxHeight = Math.max(img1.height);
+
+        const offCanvas = document.createElement('canvas');
+        offCanvas.width = totalWidth;
+        offCanvas.height = maxHeight;
+        const offCtx = offCanvas.getContext('2d');
+
+        offCtx.drawImage(img1, 0, 0);
+
+        const imageData = offCtx.getImageData(0, 0, offCanvas.width, offCanvas.height);
+        set_image_data(imageData);
+
+
+        console.log(imageData);
+        // Optionally, clean up
+        offCanvas.width = 0;
+        offCanvas.height = 0;
+
+      };
     };
 
 
@@ -70,29 +96,30 @@ const GameCanvas = () => {
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
 
-      canvas.width = window.innerWidth - 40;
+      canvas.width = window.innerWidth - 400;
       canvas.height = window.innerHeight - 200;
-      ctx.imageSmoothingEnabled = false;
 
-      const img = new Image();
-      img.src = backgroundImage;
-      img.onload = () => {
-        const scale = canvas.height / img.height;
-        const scaledWidth = img.width * scale;
+      console.log("Canvas resized to:", canvas.width, canvas.height);
+      // ctx.imageSmoothingEnabled = false;
 
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(img, 0, 0, img.width, img.height, 0, 0, scaledWidth, canvas.height);
+      // const img = new Image();
+      // img.src = backgroundImage;
+      // img.onload = () => {
+      //   const scale = canvas.height / img.height;
+      //   const scaledWidth = img.width * scale;
 
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        set_image_data(imageData);
+      //   ctx.clearRect(0, 0, canvas.width, canvas.height);
+      //   ctx.drawImage(img, 0, 0, img.width, img.height, 0, 0, scaledWidth, canvas.height);
 
-        // Тільки після цього викликаємо resize в Rust, щоб оновити розміри
-        resize(canvas.width, canvas.height);
-      };
+      //   const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      //   set_image_data(imageData); // mb this should be with game constructor
+
+      //   resize(canvas.width, canvas.height);
+      // };
     };
 
     resizeCanvas();
-    window.addEventListener("resize", resizeCanvas);
+    // window.addEventListener("resize", resizeCanvas);
 
     const handleKeyDown = (e) => {
       if (keys.current.hasOwnProperty(e.code)) {

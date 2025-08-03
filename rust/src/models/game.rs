@@ -6,6 +6,7 @@ use crate::models::player::Player;
 use crate::models::traits::CanvasObject;
 use web_sys::CanvasRenderingContext2d;
 
+// move bullets and all other new objects to objects array
 pub struct Game {
     pub map: Map,
     pub players: Vec<Player>,

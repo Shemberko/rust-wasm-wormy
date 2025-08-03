@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use wasm_bindgen::{Clamped, JsValue};
+use wasm_bindgen::{Clamped};
 use web_sys::{CanvasRenderingContext2d, ImageData};
 
 pub struct Map {
@@ -25,26 +25,9 @@ impl Map {
         map_width: u32,
         map_height: u32,
     ) -> Self {
-        let mut pixels = vec![0u8; (map_width * map_height * 4) as usize];
+        let mut pixels: Vec<u8> = vec![0u8; (map_width * map_height * 4) as usize];
 
-        // Генеруємо землю знизу (все, що нижче половини карти — суцільний шар)
-        for y in 0..map_height {
-            for x in 0..map_width {
-                let idx = ((y * map_width + x) * 4) as usize;
-                if y > map_height / 2 {
-                    // коричнева земля
-                    pixels[idx] = 139; // R
-                    pixels[idx + 1] = 69; // G
-                    pixels[idx + 2] = 19; // B
-                    pixels[idx + 3] = 255; // A (непрозора)
-                } else {
-                    // повітря (прозоре)
-                    pixels[idx + 3] = 0;
-                }
-            }
-        }
-
-        // Створюємо ImageData з пікселів
+        // mb delete this if move image data inicialization to constructor
         let image_data =
             ImageData::new_with_u8_clamped_array_and_sh(Clamped(&pixels), map_width, map_height)
                 .expect("failed to create ImageData");
@@ -62,12 +45,44 @@ impl Map {
     }
 
     pub fn draw(&self) {
-        let _ = self.canvas.put_image_data(
-            &self.image_data,
-            0.0 - self.camera_x as f64,
-            0.0 - self.camera_y as f64,
-        );
+        if let Some(ref img_data) = self.cropped_visible_image() {
+            let _ = self.canvas.put_image_data(
+                img_data,
+                0.0,
+                0.0,
+            );
+        }
     }
+
+    /// Crops the image data to the visible area and returns a new ImageData
+    pub fn cropped_visible_image(&self) -> Option<ImageData> {
+        // Встановлюємо координати вручну або отримуємо їх з self.visible_area()
+        let (left, top, right, bottom) = (600, 400, 1800, 1080);
+
+        let crop_width = right - left;
+        let crop_height = bottom - top;
+
+        // Отримуємо фактичну ширину (рядка) зображення
+        let image_width = self.image_data.width();
+        let data = self.image_data.data();
+
+        let mut cropped_pixels = Vec::with_capacity((crop_width * crop_height * 4) as usize);
+
+        for y in top..bottom {
+            for x in left..right {
+                // Виправлено: використовуємо image_width, а не self.width
+                let orig_idx = ((y * image_width + x) * 4) as usize;
+                cropped_pixels.extend_from_slice(&data[orig_idx..orig_idx + 4]);
+            }
+        }
+
+        ImageData::new_with_u8_clamped_array_and_sh(
+            Clamped(&cropped_pixels),
+            crop_width,
+            crop_height,
+        ).ok()
+    }
+
 
     pub fn is_solid_at(&self, x: f64, y: f64) -> bool {
         let px = x.floor() as i32;
