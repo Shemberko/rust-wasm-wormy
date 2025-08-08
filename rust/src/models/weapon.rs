@@ -84,7 +84,7 @@ impl Weapon {
 }
 
 impl CanvasObject for Weapon {
-    fn draw(&self, ctx: &CanvasRenderingContext2d) {
+    fn draw(&self, ctx: &CanvasRenderingContext2d, map: &Map) {
         ctx.save();
 
         if let Some(anim) = self.animations.get(&self.current_anim) {

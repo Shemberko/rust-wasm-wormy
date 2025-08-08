@@ -2,7 +2,7 @@ use crate::models::map::Map;
 use web_sys::CanvasRenderingContext2d;
 
 pub trait CanvasObject {
-    fn draw(&self, ctx: &CanvasRenderingContext2d);
+    fn draw(&self, ctx: &CanvasRenderingContext2d, map: &Map);
     fn update(&mut self, delta_time: f64, map: &Map, canvas_height: f64);
 }
 

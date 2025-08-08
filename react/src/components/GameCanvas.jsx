@@ -4,7 +4,6 @@ import init, {
   update,
   resize,
   init_player,
-  set_image_data,
   shoot
 } from "../../../rust/pkg/wararar.js";
 import backgroundImage from '../../assets/tile_ground.png';
@@ -13,6 +12,7 @@ const GameCanvas = () => {
   const canvasRef = useRef(null);
   const [ready, setReady] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [imageData, set_image_data] = useState(null);
 
   const keys = useRef({
     ArrowUp: false,
@@ -59,36 +59,46 @@ const GameCanvas = () => {
 
       // Load three images and combine them side by side
       const img1 = new Image();
-  
+
       img1.src = backgroundImage;
-    
+
 
       img1.onload = () => {
-        // Ensure all images are loaded
         if (!img1.complete) return;
 
+        const cropPercent = 0.0;
+        const cropY = img1.height * cropPercent;
+        const croppedHeight = img1.height * (1 - cropPercent);
         const totalWidth = img1.width;
-        const maxHeight = Math.max(img1.height);
 
-        const offCanvas = document.createElement('canvas');
+        // Створити тимчасовий канвас з обрізаною висотою
+        const offCanvas = document.createElement("canvas");
         offCanvas.width = totalWidth;
-        offCanvas.height = maxHeight;
-        const offCtx = offCanvas.getContext('2d');
+        offCanvas.height = croppedHeight;
+        const offCtx = offCanvas.getContext("2d");
+        if (!offCtx) return;
 
-        offCtx.drawImage(img1, 0, 0);
+        // Намалювати зображення, обрізавши верх
+        offCtx.drawImage(
+          img1,
+          0, cropY,                 // джерело: зсув по Y
+          totalWidth, croppedHeight, // джерело: розмір
+          0, 0,                      // канвас: куди малювати
+          totalWidth, croppedHeight  // канвас: розмір
+        );
 
-        const imageData = offCtx.getImageData(0, 0, offCanvas.width, offCanvas.height);
+        // Отримати обрізаний ImageData
+        const imageData = offCtx.getImageData(0, 0, totalWidth, croppedHeight);
         set_image_data(imageData);
 
+        console.log("Cropped image:", imageData.width, imageData.height);
 
-        console.log(imageData);
-        // Optionally, clean up
+        // Clean up
         offCanvas.width = 0;
         offCanvas.height = 0;
-
       };
-    };
 
+    };
 
     const resizeCanvas = () => {
       const canvas = canvasRef.current;
@@ -144,12 +154,6 @@ const GameCanvas = () => {
       update(pressedKeysArray);
     }, 16);
 
-    try {
-      play();
-    } catch (e) {
-      console.error("play() error:", e);
-    }
-
     return () => {
       clearInterval(interval);
       window.removeEventListener("resize", resizeCanvas);
@@ -157,6 +161,16 @@ const GameCanvas = () => {
       window.removeEventListener("keyup", handleKeyUp);
     };
   }, [ready, isPlaying]);
+
+  useEffect(() => {
+    if (imageData && isPlaying) {
+      try {
+        play(imageData);
+      } catch (e) {
+        console.error("play() error:", e);
+      }
+    }
+  }, [imageData, isPlaying]);
 
   const handlePlayClick = () => {
     setIsPlaying(true);

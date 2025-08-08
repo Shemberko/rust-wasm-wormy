@@ -4,7 +4,7 @@ use crate::models::bullet::Bullet;
 use crate::models::map::Map;
 use crate::models::player::Player;
 use crate::models::traits::CanvasObject;
-use web_sys::CanvasRenderingContext2d;
+use web_sys::{CanvasRenderingContext2d, ImageData};
 
 // move bullets and all other new objects to objects array
 pub struct Game {
@@ -22,14 +22,9 @@ impl Game {
         canvas_width: u32,
         canvas_height: u32,
         canvas: Rc<CanvasRenderingContext2d>,
+        data: ImageData,
     ) -> Self {
-        let map = Map::new(
-            canvas_width,
-            canvas_height,
-            Rc::clone(&canvas),
-            canvas_width,
-            canvas_height,
-        );
+        let map = Map::new(canvas_width, canvas_height, Rc::clone(&canvas), data);
         let players = Vec::new();
         let objects: Vec<Box<dyn CanvasObject>> = Vec::new();
 
@@ -48,11 +43,7 @@ impl Game {
         self.players.push(player);
     }
 
-    pub fn add_object(&mut self, object: Box<dyn CanvasObject>) {
-        self.objects.push(object);
-    }
-
-    pub fn draw(&self) {
+    pub fn draw(&mut self) {
         self.canvas.clear_rect(
             0.0,
             0.0,
@@ -60,14 +51,17 @@ impl Game {
             self.canvas_height as f64,
         );
 
+        if let Some(player) = self.players.get(0) {
+            self.map.update_camera(player);
+        }
         self.map.draw();
 
         self.players.iter().for_each(|player| {
-            player.draw(&self.canvas);
+            player.draw(&self.canvas, &self.map);
         });
 
         for bullet in &self.bullets {
-            bullet.draw(&self.canvas);
+            bullet.draw(&self.canvas, &self.map);
         }
     }
 
@@ -77,7 +71,7 @@ impl Game {
 
     pub fn update(&mut self) {
         let map = &self.map;
-        let canvas_height = self.canvas_height;
+        let canvas_height = self.map.image_data.height() as f64;
 
         self.players.iter_mut().for_each(|player| {
             player.update(0.016, map, canvas_height as f64);

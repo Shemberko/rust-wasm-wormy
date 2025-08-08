@@ -5,7 +5,7 @@ use wasm_bindgen_futures::JsFuture;
 use web_sys::{window, CanvasRenderingContext2d, HtmlImageElement};
 
 use crate::animation::Animation;
-use crate::models::position::{self, Position};
+use crate::models::position::Position;
 use crate::models::weapon::Weapon;
 
 use crate::models::map::Map;
@@ -26,18 +26,22 @@ pub struct Player {
 }
 
 impl CanvasObject for Player {
-    fn draw(&self, ctx: &CanvasRenderingContext2d) {
+    fn draw(&self, ctx: &CanvasRenderingContext2d, map: &Map) {
+        let draw_x = self.position.x - map.camera_x as f64;
+        let draw_y = self.position.y - map.camera_y as f64;
+
         ctx.save();
         if self.facing_left {
-            let _ = ctx.translate(self.position.x + self.width, self.position.y);
+            let _ = ctx.translate(draw_x + self.width, draw_y);
             let _ = ctx.scale(-1.0, 1.0);
             self.draw_animation(ctx, 0.0, 0.0);
         } else {
-            self.draw_animation(ctx, self.position.x, self.position.y);
+            self.draw_animation(ctx, draw_x, draw_y);
         }
         ctx.restore();
+
         if let Some(weapon) = &self.weapon {
-            weapon.draw(ctx);
+            weapon.draw(ctx, map); // weapon теж повинен враховувати зсув
         }
     }
 
@@ -154,12 +158,12 @@ impl GravityObject for Player {
 
     fn is_on_ground(&self, map: &Map) -> bool {
         let feet_y = self.position.y + self.height + 1.0;
-        let mut x = self.position.x;
+        let mut x = self.position.x + 1.0;
         while x <= self.position.x + self.width {
             if map.is_solid_at(x, feet_y) {
                 return true;
             }
-            x += 8.0;
+            x += 19.0;
         }
         // Also check the very right edge in case width is not a multiple of 4
         if map.is_solid_at(self.position.x + self.width - 1.0, feet_y) {
@@ -169,7 +173,9 @@ impl GravityObject for Player {
     }
 
     fn handle_ground_collision(&mut self, map: &Map) -> bool {
-        if self.is_on_ground(map) {
+        let on_ground = self.is_on_ground(map);
+
+        if on_ground {
             loop {
                 self.position.y -= 0.1;
                 if !self.is_on_ground(map) {
@@ -317,31 +323,31 @@ impl Player {
         JsFuture::from(promise).await?;
 
         let animation = Animation::new(img, 20.0, 20.0, vec![4, 4, 6, 3, 2, 6], 0.1, 1);
-        let weapon = Weapon::new(
-            50.0,
-            50.0,
-            vec![
-                (
-                    "idle".to_string(),
-                    "animations/guns/[IDLE] AK 47.png".to_string(),
-                ),
-                (
-                    "shoot".to_string(),
-                    "animations/guns/[SHOOT WITH MUZZLE FLASH] AK 47.png".to_string(),
-                ),
-            ],
-        )
-        .await?;
+        // let weapon = Weapon::new(
+        //     50.0,
+        //     50.0,
+        //     vec![
+        //         (
+        //             "idle".to_string(),
+        //             "animations/guns/[IDLE] AK 47.png".to_string(),
+        //         ),
+        //         (
+        //             "shoot".to_string(),
+        //             "animations/guns/[SHOOT WITH MUZZLE FLASH] AK 47.png".to_string(),
+        //         ),
+        //     ],
+        // )
+        // .await?;
 
         Ok(Player {
-            position: Position { x: 50.0, y: 50.0 },
+            position: Position { x: 50.0, y: 300.0 },
             velocity_y: 0.0,
             width: 64.0,
             height: 64.0,
             animation: Some(animation),
             pressed_keys: HashSet::new(),
             facing_left: false,
-            weapon: Some(weapon),
+            weapon: None,
         })
     }
 

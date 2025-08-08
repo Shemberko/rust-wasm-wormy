@@ -15,8 +15,8 @@ use std::collections::HashSet;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::{closure::Closure, JsCast};
 use web_sys::{
-    window, CanvasRenderingContext2d, ErrorEvent, Event, HtmlCanvasElement, HtmlImageElement,
-    ImageData, MessageEvent, WebSocket,
+    window, CanvasRenderingContext2d, ErrorEvent, Event, HtmlCanvasElement, ImageData,
+    MessageEvent, WebSocket,
 };
 
 use crate::models::game::Game;
@@ -32,7 +32,7 @@ thread_local! {
 }
 
 #[wasm_bindgen]
-pub async fn play() -> Result<(), JsValue> {
+pub async fn play(data: ImageData) -> Result<(), JsValue> {
     let window = window().unwrap();
     let document = window.document().unwrap();
     let canvas = document
@@ -54,6 +54,7 @@ pub async fn play() -> Result<(), JsValue> {
             canvas_width as u32,
             canvas_height as u32,
             Rc::new(ctx),
+            data,
         ));
     });
 
@@ -158,15 +159,6 @@ pub fn resize(width: f64, height: f64) -> Result<(), JsValue> {
         }
     });
     Ok(())
-}
-
-#[wasm_bindgen]
-pub fn set_image_data(data: ImageData) {
-    GAME.with(|game| {
-        if let Some(g) = &mut *game.borrow_mut() {
-            g.map.image_data = data;
-        }
-    });
 }
 
 #[wasm_bindgen]

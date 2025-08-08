@@ -17,7 +17,7 @@ pub struct Bullet {
 }
 
 impl CanvasObject for Bullet {
-    fn draw(&self, ctx: &CanvasRenderingContext2d) {
+    fn draw(&self, ctx: &CanvasRenderingContext2d, map: &Map) {
         ctx.draw_image_with_html_image_element_and_dw_and_dh(
             &self.image,
             self.position.x,
