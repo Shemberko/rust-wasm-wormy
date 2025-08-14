@@ -85,26 +85,17 @@ impl Weapon {
 
 impl CanvasObject for Weapon {
     fn draw(&self, ctx: &CanvasRenderingContext2d, map: &Map) {
+        let draw_x = self.position.x - map.camera_x as f64;
+        let draw_y = self.position.y - map.camera_y as f64;
+
         ctx.save();
 
         if let Some(anim) = self.animations.get(&self.current_anim) {
             if self.facing_left {
                 ctx.scale(-1.0, 1.0).unwrap();
-                anim.draw(
-                    ctx,
-                    -self.position.x - self.width,
-                    self.position.y,
-                    self.width,
-                    self.height,
-                );
+                anim.draw(ctx, -draw_x - self.width, draw_y, self.width, self.height);
             } else {
-                anim.draw(
-                    ctx,
-                    self.position.x,
-                    self.position.y,
-                    self.width,
-                    self.height,
-                );
+                anim.draw(ctx, draw_x, draw_y, self.width, self.height);
             }
         }
 

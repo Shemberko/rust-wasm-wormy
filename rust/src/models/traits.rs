@@ -29,10 +29,7 @@ pub trait AnimatedObject {
 }
 
 pub trait InputControlledObject {
+    fn pressed(&self, keys: &[&str]) -> bool;
     fn is_moving_horizontally(&self) -> bool;
-    fn is_left_pressed(&self) -> bool;
-    fn is_right_pressed(&self) -> bool;
-    fn is_jump_pressed(&self) -> bool;
-    fn handle_horizontal_movement(&mut self, map: &Map, canvas_height: f64);
-    fn handle_jump(&mut self, map: &Map, canvas_height: f64, is_on_ground: bool);
+    fn handle_input(&mut self, map: &Map, canvas_height: f64, is_on_ground: bool);
 }

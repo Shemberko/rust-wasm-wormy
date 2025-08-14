@@ -12,6 +12,7 @@ pub struct Map {
     pub canvas_height: u32,
 
     pub image_data: ImageData,
+    pub collision_map: Vec<bool>, // Нова кешована карта
 
     pub camera_x: u32,
     pub camera_y: u32,
@@ -22,13 +23,27 @@ impl Map {
         canvas_width: u32,
         canvas_height: u32,
         canvas: Rc<CanvasRenderingContext2d>,
-        data: ImageData,
+        image_data: ImageData,
     ) -> Self {
+        let width = image_data.width();
+        let height = image_data.height();
+        let data = image_data.data();
+
+        // Заповнюємо кеш
+        let mut collision_map = Vec::with_capacity((width * height) as usize);
+        for y in 0..height {
+            for x in 0..width {
+                let idx = ((y * width + x) * 4 + 3) as usize; // Альфа-канал
+                collision_map.push(data[idx] > 0);
+            }
+        }
+
         Self {
             canvas,
             canvas_width,
             canvas_height,
-            image_data: data,
+            image_data: image_data,
+            collision_map,
             camera_x: 0,
             camera_y: 0,
         }
@@ -113,22 +128,18 @@ impl Map {
     }
 
     pub fn is_solid_at(&self, x: f64, y: f64) -> bool {
-        let px = x.floor() as i32;
-        let py = y.floor() as i32;
-
-        if px < 0
-            || py < 0
-            || px >= self.image_data.width() as i32
-            || py >= self.image_data.height() as i32
-        {
-            return false;
+        if x < 0.0 || y < 0.0 {
+            return true;
         }
 
-        let idx = ((py as u32 * self.image_data.width() + px as u32) * 4 + 3) as usize;
-        let data = self.image_data.data();
+        let px = x as u32;
+        let py = y as u32;
 
-        let result = data.get(idx).map_or(false, |&alpha| alpha > 0);
+        if px >= self.image_data.width() || py >= self.image_data.height() {
+            return true;
+        }
 
-        result
+        let idx = (py * self.image_data.width() + px) as usize;
+        self.collision_map[idx]
     }
 }

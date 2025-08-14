@@ -49,8 +49,7 @@ impl CanvasObject for Player {
         let is_on_ground = self.check_if_on_ground(map, canvas_height);
         let is_moving = self.is_moving_horizontally();
 
-        self.handle_horizontal_movement(map, canvas_height);
-        self.handle_jump(map, canvas_height, is_on_ground);
+        self.handle_input(map, canvas_height, is_on_ground);
 
         self.update_animation_state(is_moving, is_on_ground);
         self.apply_physics(map, canvas_height);
@@ -137,7 +136,7 @@ impl GravityObject for Player {
     }
 
     fn apply_vertical_movement(&mut self, map: &Map, canvas_height: f64) {
-        const MAX_STEP: f64 = 1.0; // субкрок — не більше 1px за раз
+        const MAX_STEP: f64 = 4.0; // субкрок — не більше 1px за раз
 
         let mut remaining = self.velocity_y;
         let step = MAX_STEP.copysign(self.velocity_y); // +1 або -1
@@ -173,16 +172,16 @@ impl GravityObject for Player {
     }
 
     fn handle_ground_collision(&mut self, map: &Map) -> bool {
-        let on_ground = self.is_on_ground(map);
+        if self.is_on_ground(map) {
+            let player_bottom = self.position.y + self.height;
+            let ground_y = player_bottom.floor();
+            let mut y = ground_y;
 
-        if on_ground {
-            loop {
-                self.position.y -= 0.1;
-                if !self.is_on_ground(map) {
-                    self.position.y += 0.1;
-                    break;
-                }
+            while map.is_solid_at(self.position.x + self.width / 2.0, y) {
+                y -= 1.0;
             }
+
+            self.position.y = y - self.height;
             self.velocity_y = 0.0;
             true
         } else {
@@ -248,39 +247,27 @@ impl AnimatedObject for Player {
 }
 
 impl InputControlledObject for Player {
+    fn pressed(&self, keys: &[&str]) -> bool {
+        keys.iter().any(|k| self.pressed_keys.contains(*k))
+    }
+
     fn is_moving_horizontally(&self) -> bool {
-        self.is_left_pressed() || self.is_right_pressed()
+        self.pressed(&["ArrowLeft", "KeyA"]) || self.pressed(&["ArrowRight", "KeyD"])
     }
 
-    fn is_left_pressed(&self) -> bool {
-        self.pressed_keys.contains("ArrowLeft") || self.pressed_keys.contains("KeyA")
-    }
-
-    fn is_right_pressed(&self) -> bool {
-        self.pressed_keys.contains("ArrowRight") || self.pressed_keys.contains("KeyD")
-    }
-
-    fn is_jump_pressed(&self) -> bool {
-        self.pressed_keys.contains("Space")
-            || self.pressed_keys.contains("KeyW")
-            || self.pressed_keys.contains("ArrowUp")
-    }
-
-    fn handle_horizontal_movement(&mut self, map: &Map, canvas_height: f64) {
+    fn handle_input(&mut self, map: &Map, canvas_height: f64, is_on_ground: bool) {
         const MOVE_SPEED: f64 = 5.0;
-        if self.is_left_pressed() {
+        if self.pressed(&["ArrowLeft", "KeyA"]) {
             self.facing_left = true;
             self.change_position(-MOVE_SPEED, 0.0, map, canvas_height);
         }
 
-        if self.is_right_pressed() {
+        if self.pressed(&["ArrowRight", "KeyD"]) {
             self.facing_left = false;
             self.change_position(MOVE_SPEED, 0.0, map, canvas_height);
         }
-    }
 
-    fn handle_jump(&mut self, map: &Map, canvas_height: f64, is_on_ground: bool) {
-        if self.is_jump_pressed() && is_on_ground {
+        if self.pressed(&["Space", "KeyW", "ArrowUp"]) && is_on_ground {
             self.jump(map, canvas_height);
         }
     }
@@ -323,21 +310,21 @@ impl Player {
         JsFuture::from(promise).await?;
 
         let animation = Animation::new(img, 20.0, 20.0, vec![4, 4, 6, 3, 2, 6], 0.1, 1);
-        // let weapon = Weapon::new(
-        //     50.0,
-        //     50.0,
-        //     vec![
-        //         (
-        //             "idle".to_string(),
-        //             "animations/guns/[IDLE] AK 47.png".to_string(),
-        //         ),
-        //         (
-        //             "shoot".to_string(),
-        //             "animations/guns/[SHOOT WITH MUZZLE FLASH] AK 47.png".to_string(),
-        //         ),
-        //     ],
-        // )
-        // .await?;
+        let weapon = Weapon::new(
+            50.0,
+            50.0,
+            vec![
+                (
+                    "idle".to_string(),
+                    "animations/guns/[IDLE] AK 47.png".to_string(),
+                ),
+                (
+                    "shoot".to_string(),
+                    "animations/guns/[SHOOT WITH MUZZLE FLASH] AK 47.png".to_string(),
+                ),
+            ],
+        )
+        .await?;
 
         Ok(Player {
             position: Position { x: 50.0, y: 300.0 },
@@ -347,7 +334,7 @@ impl Player {
             animation: Some(animation),
             pressed_keys: HashSet::new(),
             facing_left: false,
-            weapon: None,
+            weapon: Some(weapon),
         })
     }
 
