@@ -12,6 +12,7 @@ pub struct Map {
     pub canvas_height: u32,
 
     pub image_data: ImageData,
+    pub pixels: Vec<u8>,
     pub collision_map: Vec<bool>, // Нова кешована карта
 
     pub camera_x: u32,
@@ -38,11 +39,14 @@ impl Map {
             }
         }
 
+        let pixels: Vec<u8> = data.to_vec();
+
         Self {
             canvas,
             canvas_width,
             canvas_height,
             image_data: image_data,
+            pixels: pixels,
             collision_map,
             camera_x: 0,
             camera_y: 0,
@@ -53,6 +57,34 @@ impl Map {
         if let Some(ref img_data) = self.cropped_visible_image() {
             let _ = self.canvas.put_image_data(img_data, 0.0, 0.0);
         }
+    }
+
+    pub fn destroy_circle(&mut self, center_x: f64, center_y: f64, radius: f64) {
+        let width = self.image_data.width() as usize;
+        let height = self.image_data.height() as usize;
+        let r2 = (radius * radius) as i32;
+
+        let cx = center_x as i32;
+        let cy = center_y as i32;
+
+        for y in (cy - radius as i32).max(0)..(cy + radius as i32).min(height as i32) {
+            for x in (cx - radius as i32).max(0)..(cx + radius as i32).min(width as i32) {
+                let dx = x - cx;
+                let dy = y - cy;
+                if dx * dx + dy * dy <= r2 {
+                    let idx = ((y as usize) * width + (x as usize)) * 4;
+                    self.pixels[idx + 3] = 0; // альфа = 0
+                    self.collision_map[y as usize * width + x as usize] = false;
+                }
+            }
+        }
+
+        self.image_data = ImageData::new_with_u8_clamped_array_and_sh(
+            Clamped(&self.pixels),
+            width as u32,
+            height as u32,
+        )
+        .unwrap();
     }
 
     /// Crops the image data to the visible area and returns a new ImageData
@@ -128,18 +160,17 @@ impl Map {
     }
 
     pub fn is_solid_at(&self, x: f64, y: f64) -> bool {
-        if x < 0.0 || y < 0.0 {
-            return true;
+        let px = x as i32;
+        let py = y as i32;
+
+        if px < 0
+            || py < 0
+            || px >= self.image_data.width() as i32
+            || py >= self.image_data.height() as i32
+        {
+            return false;
         }
 
-        let px = x as u32;
-        let py = y as u32;
-
-        if px >= self.image_data.width() || py >= self.image_data.height() {
-            return true;
-        }
-
-        let idx = (py * self.image_data.width() + px) as usize;
-        self.collision_map[idx]
+        self.collision_map[py as usize * self.image_data.width() as usize + px as usize]
     }
 }

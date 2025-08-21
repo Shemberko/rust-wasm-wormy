@@ -18,17 +18,20 @@ pub struct Bullet {
 
 impl CanvasObject for Bullet {
     fn draw(&self, ctx: &CanvasRenderingContext2d, map: &Map) {
+        let draw_x = self.position.x - map.camera_x as f64;
+        let draw_y = self.position.y - map.camera_y as f64;
+
         ctx.draw_image_with_html_image_element_and_dw_and_dh(
             &self.image,
-            self.position.x,
-            self.position.y,
+            draw_x,
+            draw_y,
             self.width,
             self.height,
         )
         .unwrap();
     }
 
-    fn update(&mut self, _delta_time: f64, map: &Map, canvas_height: f64) {
+    fn update(&mut self, _delta_time: f64, map: &mut Map, canvas_height: f64) {
         if self.facing_left {
             self.position.x -= self.speed;
         } else {
@@ -50,6 +53,8 @@ impl CanvasObject for Bullet {
         }
 
         if self.collides_with_map(map) {
+            map.destroy_circle(self.position.x, self.position.y, 30.0);
+
             self.is_active = false;
         }
     }

@@ -102,7 +102,7 @@ impl CanvasObject for Weapon {
         ctx.restore();
     }
 
-    fn update(&mut self, delta_time: f64, _map: &Map, _canvas_height: f64) {
+    fn update(&mut self, delta_time: f64, _map: &mut Map, _canvas_height: f64) {
         if let Some(anim) = self.animations.get_mut(&self.current_anim) {
             anim.update(delta_time, true, true, 0.0);
         }

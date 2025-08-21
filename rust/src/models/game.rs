@@ -70,16 +70,16 @@ impl Game {
     }
 
     pub fn update(&mut self) {
-        let map = &self.map;
         let canvas_height = self.map.image_data.height() as f64;
 
-        self.players.iter_mut().for_each(|player| {
-            player.update(0.016, map, canvas_height as f64);
-        });
+        for player in &mut self.players {
+            player.update(0.016, &mut self.map, canvas_height);
+        }
 
         for bullet in &mut self.bullets {
-            bullet.update(0.016, map, canvas_height as f64);
+            bullet.update(0.016, &mut self.map, canvas_height);
         }
+
         self.bullets.retain(|b| b.is_active);
     }
 }

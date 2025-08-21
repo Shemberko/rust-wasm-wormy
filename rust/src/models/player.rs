@@ -45,7 +45,7 @@ impl CanvasObject for Player {
         }
     }
 
-    fn update(&mut self, delta_time: f64, map: &Map, canvas_height: f64) {
+    fn update(&mut self, delta_time: f64, map: &mut Map, canvas_height: f64) {
         let is_on_ground = self.check_if_on_ground(map, canvas_height);
         let is_moving = self.is_moving_horizontally();
 
