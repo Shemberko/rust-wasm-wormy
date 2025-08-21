@@ -2,8 +2,8 @@ use crate::models::map::Map;
 use web_sys::CanvasRenderingContext2d;
 
 pub trait CanvasObject {
-    fn draw(&self, ctx: &CanvasRenderingContext2d);
-    fn update(&mut self, delta_time: f64, map: &Map, canvas_height: f64);
+    fn draw(&self, ctx: &CanvasRenderingContext2d, map: &Map);
+    fn update(&mut self, delta_time: f64, map: &mut Map, canvas_height: f64);
 }
 
 pub trait GravityObject {
@@ -29,10 +29,7 @@ pub trait AnimatedObject {
 }
 
 pub trait InputControlledObject {
+    fn pressed(&self, keys: &[&str]) -> bool;
     fn is_moving_horizontally(&self) -> bool;
-    fn is_left_pressed(&self) -> bool;
-    fn is_right_pressed(&self) -> bool;
-    fn is_jump_pressed(&self) -> bool;
-    fn handle_horizontal_movement(&mut self, map: &Map, canvas_height: f64);
-    fn handle_jump(&mut self, map: &Map, canvas_height: f64, is_on_ground: bool);
+    fn handle_input(&mut self, map: &Map, canvas_height: f64, is_on_ground: bool);
 }

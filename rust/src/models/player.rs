@@ -5,7 +5,7 @@ use wasm_bindgen_futures::JsFuture;
 use web_sys::{window, CanvasRenderingContext2d, HtmlImageElement};
 
 use crate::animation::Animation;
-use crate::models::position::{self, Position};
+use crate::models::position::Position;
 use crate::models::weapon::Weapon;
 
 use crate::models::map::Map;
@@ -26,27 +26,30 @@ pub struct Player {
 }
 
 impl CanvasObject for Player {
-    fn draw(&self, ctx: &CanvasRenderingContext2d) {
+    fn draw(&self, ctx: &CanvasRenderingContext2d, map: &Map) {
+        let draw_x = self.position.x - map.camera_x as f64;
+        let draw_y = self.position.y - map.camera_y as f64;
+
         ctx.save();
         if self.facing_left {
-            let _ = ctx.translate(self.position.x + self.width, self.position.y);
+            let _ = ctx.translate(draw_x + self.width, draw_y);
             let _ = ctx.scale(-1.0, 1.0);
             self.draw_animation(ctx, 0.0, 0.0);
         } else {
-            self.draw_animation(ctx, self.position.x, self.position.y);
+            self.draw_animation(ctx, draw_x, draw_y);
         }
         ctx.restore();
+
         if let Some(weapon) = &self.weapon {
-            weapon.draw(ctx);
+            weapon.draw(ctx, map); // weapon теж повинен враховувати зсув
         }
     }
 
-    fn update(&mut self, delta_time: f64, map: &Map, canvas_height: f64) {
+    fn update(&mut self, delta_time: f64, map: &mut Map, canvas_height: f64) {
         let is_on_ground = self.check_if_on_ground(map, canvas_height);
         let is_moving = self.is_moving_horizontally();
 
-        self.handle_horizontal_movement(map, canvas_height);
-        self.handle_jump(map, canvas_height, is_on_ground);
+        self.handle_input(map, canvas_height, is_on_ground);
 
         self.update_animation_state(is_moving, is_on_ground);
         self.apply_physics(map, canvas_height);
@@ -133,7 +136,7 @@ impl GravityObject for Player {
     }
 
     fn apply_vertical_movement(&mut self, map: &Map, canvas_height: f64) {
-        const MAX_STEP: f64 = 1.0; // субкрок — не більше 1px за раз
+        const MAX_STEP: f64 = 4.0; // субкрок — не більше 1px за раз
 
         let mut remaining = self.velocity_y;
         let step = MAX_STEP.copysign(self.velocity_y); // +1 або -1
@@ -154,12 +157,12 @@ impl GravityObject for Player {
 
     fn is_on_ground(&self, map: &Map) -> bool {
         let feet_y = self.position.y + self.height + 1.0;
-        let mut x = self.position.x;
+        let mut x = self.position.x + 1.0;
         while x <= self.position.x + self.width {
             if map.is_solid_at(x, feet_y) {
                 return true;
             }
-            x += 8.0;
+            x += 19.0;
         }
         // Also check the very right edge in case width is not a multiple of 4
         if map.is_solid_at(self.position.x + self.width - 1.0, feet_y) {
@@ -170,13 +173,15 @@ impl GravityObject for Player {
 
     fn handle_ground_collision(&mut self, map: &Map) -> bool {
         if self.is_on_ground(map) {
-            loop {
-                self.position.y -= 0.1;
-                if !self.is_on_ground(map) {
-                    self.position.y += 0.1;
-                    break;
-                }
+            let player_bottom = self.position.y + self.height;
+            let ground_y = player_bottom.floor();
+            let mut y = ground_y;
+
+            while map.is_solid_at(self.position.x + self.width / 2.0, y) {
+                y -= 1.0;
             }
+
+            self.position.y = y - self.height;
             self.velocity_y = 0.0;
             true
         } else {
@@ -242,39 +247,27 @@ impl AnimatedObject for Player {
 }
 
 impl InputControlledObject for Player {
+    fn pressed(&self, keys: &[&str]) -> bool {
+        keys.iter().any(|k| self.pressed_keys.contains(*k))
+    }
+
     fn is_moving_horizontally(&self) -> bool {
-        self.is_left_pressed() || self.is_right_pressed()
+        self.pressed(&["ArrowLeft", "KeyA"]) || self.pressed(&["ArrowRight", "KeyD"])
     }
 
-    fn is_left_pressed(&self) -> bool {
-        self.pressed_keys.contains("ArrowLeft") || self.pressed_keys.contains("KeyA")
-    }
-
-    fn is_right_pressed(&self) -> bool {
-        self.pressed_keys.contains("ArrowRight") || self.pressed_keys.contains("KeyD")
-    }
-
-    fn is_jump_pressed(&self) -> bool {
-        self.pressed_keys.contains("Space")
-            || self.pressed_keys.contains("KeyW")
-            || self.pressed_keys.contains("ArrowUp")
-    }
-
-    fn handle_horizontal_movement(&mut self, map: &Map, canvas_height: f64) {
+    fn handle_input(&mut self, map: &Map, canvas_height: f64, is_on_ground: bool) {
         const MOVE_SPEED: f64 = 5.0;
-        if self.is_left_pressed() {
+        if self.pressed(&["ArrowLeft", "KeyA"]) {
             self.facing_left = true;
             self.change_position(-MOVE_SPEED, 0.0, map, canvas_height);
         }
 
-        if self.is_right_pressed() {
+        if self.pressed(&["ArrowRight", "KeyD"]) {
             self.facing_left = false;
             self.change_position(MOVE_SPEED, 0.0, map, canvas_height);
         }
-    }
 
-    fn handle_jump(&mut self, map: &Map, canvas_height: f64, is_on_ground: bool) {
-        if self.is_jump_pressed() && is_on_ground {
+        if self.pressed(&["Space", "KeyW", "ArrowUp"]) && is_on_ground {
             self.jump(map, canvas_height);
         }
     }
@@ -334,7 +327,7 @@ impl Player {
         .await?;
 
         Ok(Player {
-            position: Position { x: 50.0, y: 50.0 },
+            position: Position { x: 50.0, y: 300.0 },
             velocity_y: 0.0,
             width: 64.0,
             height: 64.0,
