@@ -127,36 +127,18 @@ impl Map {
     }
 
     pub fn update_camera(&mut self, player: &Player) {
-        // let center_x = (self.canvas_width / 2) as f64;
-        // let mut camera_x = player.position.x + player.width / 2.0 - center_x;
+        let image_width = self.image_data.width() as i32;
+        let image_height = self.image_data.height() as i32;
 
-        // if camera_x < 0.0 {
-        //     camera_x = 0.0;
-        // }
+        let target_x = player.position.x as i32 - (self.canvas_width as i32 / 2);
+        let target_y = player.position.y as i32 - (self.canvas_height as i32 / 2);
 
-        // let max_camera_x = (self.width as f64) - (self.canvas_width as f64);
-        // if camera_x > max_camera_x {
-        //     camera_x = max_camera_x;
-        // }
-
-        // self.camera_x = camera_x as u32;
-        // let center_y = (self.canvas_height / 2) as f64;
-        // let mut camera_y = player.position.y + player.height / 2.0 - center_y;
-
-        // if camera_y < 0.0 {
-        //     camera_y = 0.0;
-        // }
-
-        // let max_camera_y = (self.height as f64) - (self.canvas_height as f64);
-        // if camera_y > max_camera_y {
-        //     camera_y = max_camera_y;
-        // }
-
-        // self.camera_x = camera_x as u32;
-        // self.camera_y = camera_y as u32;
-
-        self.camera_x = 0 as u32;
-        self.camera_y = 500 as u32;
+        self.camera_x = target_x
+            .clamp(0, image_width - self.canvas_width as i32)
+            .max(0) as u32;
+        self.camera_y = target_y
+            .clamp(0, image_height - self.canvas_height as i32)
+            .max(0) as u32;
     }
 
     pub fn is_solid_at(&self, x: f64, y: f64) -> bool {
